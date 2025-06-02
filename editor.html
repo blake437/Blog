@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Edit Blog</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 820px; margin: 2em auto; }
+    .controls { margin-bottom: 2em; }
+    .controls input, .controls select { margin-right: 0.7em; padding: 0.4em; }
+    .profile-sel { margin-bottom: 1.5em; }
+    .post-list { margin-bottom: 3em; }
+    .post-entry { border-bottom: 1px solid #bbb; margin-bottom: 1.2em; padding-bottom: 0.7em; }
+    .post-title { font-size: 1.1em; font-weight:bold; }
+    .post-author { font-size:0.95em; color:#555; }
+    .edit-btn, .del-btn, .grant-btn { margin-left: 0.6em; }
+    label { display: block; margin-top: 0.7em; }
+    textarea { width: 98%; min-height: 80px; }
+    .json-editor { width: 100%; height: 200px; font-family: monospace; margin-top:1em; }
+    .hidden { display: none; }
+    .perm-list { font-size: 0.9em; color: #333; margin-top:0.3em; }
+    .download-btn { margin-top: 1em; }
+  </style>
+</head>
+<body>
+  <h1>Edit Blog</h1>
+  <div class="profile-sel">
+    <label>
+      Select profile:
+      <select id="profile-sel"></select>
+    </label>
+    <span id="profile-info"></span>
+  </div>
+  <div class="controls">
+    <button id="add-post-btn">Add Post</button>
+    <button id="toggle-json-btn">Edit JSON Raw</button>
+    <button id="download-btn" class="download-btn">Download JSON</button>
+  </div>
+  <div id="json-editor-container" class="hidden">
+    <textarea id="json-editor" class="json-editor"></textarea>
+    <button id="save-json-btn">Save JSON</button>
+  </div>
+  <div id="post-list" class="post-list"></div>
+  <div id="post-form-container" class="hidden">
+    <h2 id="form-title"></h2>
+    <form id="post-form">
+      <label>Title: <input type="text" id="form-title-input" required></label>
+      <label>Date: <input type="date" id="form-date-input" required></label>
+      <label>Tags (comma separated): <input type="text" id="form-tags-input"></label>
+      <label>Type: <input type="text" id="form-type-input"></label>
+      <label>Content:<br>
+        <textarea id="form-content-input" required></textarea>
+      </label>
+      <label>Author:
+        <select id="form-author-input"></select>
+      </label>
+      <button type="submit" id="form-save-btn">Save</button>
+      <button type="button" id="form-cancel-btn">Cancel</button>
+    </form>
+  </div>
+<script>
+function parseQueryData() {
+  const params = new URLSearchParams(window.location.search);
+  let data = null;
+  if (params.has('data')) {
+    try {
+      data = JSON.parse(decodeURIComponent(params.get('data')));
+    } catch (e) {}
+  }
+  return data || {title:"Blog", posts:[]};
+}
+let blogData = parseQueryData();
+
+// Profiles: admin and unique authors from blogData
+function getProfiles() {
+  const authorSet = new Set(blogData.posts.map(p=>p.author));
+  let profiles = [{name:'admin', role:'admin'}];
+  authorSet.forEach(a=>profiles.push({name:a, role:'author'}));
+  return profiles;
+}
+let profiles = getProfiles();
+let currentProfile = profiles[0];
+
+function updateProfileSel() {
+  const sel = document.getElementById('profile-sel');
+  sel.innerHTML = '';
+  profiles.forEach((p,i) => {
+    const opt = document.createElement('option');
+    opt.value = p.name;
+    opt.textContent = p.role==='admin'?`${p.name} (admin)`:p.name;
+    sel.appendChild(opt);
+  });
+  sel.value = currentProfile.name;
+  updateProfileInfo();
+}
+function updateProfileInfo() {
+  document.getElementById('profile-info').textContent =
+    currentProfile.role==='admin'
+      ? 'You can edit any post and assign permissions.'
+      : `You can edit or delete your posts.`;
+}
+
+document.getElementById('profile-sel').addEventListener('change', function() {
+  currentProfile = profiles.find(p=>p.name===this.value) || profiles[0];
+  updateProfileInfo();
+  renderPosts();
+});
+
+// Permissions: track granted editors for posts
+blogData.posts.forEach(p=>{if(!p.editors)p.editors=[];});
+
+function renderPosts() {
+  const pl = document.getElementById('post-list');
+  pl.innerHTML = '';
+  blogData.posts.forEach((post, i) => {
+    const entry = document.createElement('div');
+    entry.className = 'post-entry';
+    entry.innerHTML = `
+      <span class="post-title">${post.title}</span>
+      <span class="post-author">by ${post.author}</span>
+      <span class="post-date">[${post.date}]</span>
+      <span class="post-type">${post.type||''}</span>
+      <span class="post-tags">${post.tags ? post.tags.join(', ') : ''}</span>
+    `;
+    // Permissions: can edit if admin, author, or in editors
+    const canEdit = (currentProfile.role==='admin') || (currentProfile.name===post.author) || (post.editors||[]).includes(currentProfile.name);
+    if (canEdit) {
+      const editBtn = document.createElement('button');
+      editBtn.textContent = 'Edit';
+      editBtn.className = 'edit-btn';
+      editBtn.onclick = () => openForm('edit', i);
+      entry.appendChild(editBtn);
+
+      const delBtn = document.createElement('button');
+      delBtn.textContent = 'Delete';
+      delBtn.className = 'del-btn';
+      delBtn.onclick = () => { if(confirm('Delete this post?')){ blogData.posts.splice(i,1); renderPosts(); updateProfilesFromPosts(); }};
+      entry.appendChild(delBtn);
+    }
+    if (currentProfile.role==='admin' || currentProfile.name===post.author) {
+      // Grant edit access to others
+      const grantBtn = document.createElement('button');
+      grantBtn.textContent = 'Grant edit access';
+      grantBtn.className = 'grant-btn';
+      grantBtn.onclick = () => grantEditorUI(i);
+      entry.appendChild(grantBtn);
+    }
+    // List editors
+    if(post.editors && post.editors.length)
+      entry.innerHTML += `<div class="perm-list">Editors: ${post.editors.join(', ')}</div>`;
+    pl.appendChild(entry);
+  });
+}
+
+function updateProfilesFromPosts() {
+  profiles = getProfiles();
+  updateProfileSel();
+}
+
+function openForm(mode, idx) {
+  document.getElementById('post-form-container').classList.remove('hidden');
+  document.getElementById('post-list').classList.add('hidden');
+  document.getElementById('json-editor-container').classList.add('hidden');
+  // Populate author select
+  const sel = document.getElementById('form-author-input');
+  sel.innerHTML = '';
+  profiles.filter(p => p.role === 'author').forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.name;
+    opt.textContent = p.name;
+    sel.appendChild(opt);
+  });
+  if(mode==='edit') {
+    const post = blogData.posts[idx];
+    document.getElementById('form-title').textContent = 'Edit Post';
+    document.getElementById('form-title-input').value = post.title;
+    document.getElementById('form-date-input').value = post.date;
+    document.getElementById('form-tags-input').value = post.tags.join(', ');
+    document.getElementById('form-type-input').value = post.type;
+    document.getElementById('form-content-input').value = post.content;
+    sel.value = post.author;
+    document.getElementById('post-form').onsubmit = function(e){
+      e.preventDefault();
+      post.title = document.getElementById('form-title-input').value;
+      post.date = document.getElementById('form-date-input').value;
+      post.tags = document.getElementById('form-tags-input').value.split(',').map(s=>s.trim()).filter(Boolean);
+      post.type = document.getElementById('form-type-input').value;
+      post.content = document.getElementById('form-content-input').value;
+      post.author = document.getElementById('form-author-input').value;
+      renderPosts(); closeForm();
+      updateProfilesFromPosts();
+    };
+  } else {
+    document.getElementById('form-title').textContent = 'Add Post';
+    document.getElementById('form-title-input').value = '';
+    document.getElementById('form-date-input').value = '';
+    document.getElementById('form-tags-input').value = '';
+    document.getElementById('form-type-input').value = '';
+    document.getElementById('form-content-input').value = '';
+    sel.value = currentProfile.name;
+    document.getElementById('post-form').onsubmit = function(e){
+      e.preventDefault();
+      const post = {
+        title: document.getElementById('form-title-input').value,
+        date: document.getElementById('form-date-input').value,
+        tags: document.getElementById('form-tags-input').value.split(',').map(s=>s.trim()).filter(Boolean),
+        type: document.getElementById('form-type-input').value,
+        content: document.getElementById('form-content-input').value,
+        author: document.getElementById('form-author-input').value,
+        editors: []
+      };
+      blogData.posts.push(post);
+      renderPosts(); closeForm();
+      updateProfilesFromPosts();
+    };
+  }
+  document.getElementById('form-cancel-btn').onclick = closeForm;
+}
+
+function closeForm() {
+  document.getElementById('post-form-container').classList.add('hidden');
+  document.getElementById('post-list').classList.remove('hidden');
+}
+document.getElementById('add-post-btn').onclick = () => openForm('add');
+
+function grantEditorUI(idx) {
+  const post = blogData.posts[idx];
+  const others = profiles.filter(p => p.role==='author' && p.name!==post.author);
+  const grantee = prompt('Grant edit access to which profile? ('+others.map(p=>p.name).join(', ')+')');
+  if(grantee && others.some(p=>p.name===grantee)) {
+    if(!post.editors) post.editors=[];
+    if(!post.editors.includes(grantee)) post.editors.push(grantee);
+    renderPosts();
+  }
+}
+
+// JSON edit
+document.getElementById('toggle-json-btn').onclick = function(){
+  const c = document.getElementById('json-editor-container');
+  c.classList.toggle('hidden');
+  document.getElementById('post-list').classList.toggle('hidden');
+  document.getElementById('json-editor').value = JSON.stringify(blogData, null, 2);
+};
+document.getElementById('save-json-btn').onclick = function(){
+  try {
+    blogData = JSON.parse(document.getElementById('json-editor').value);
+    renderPosts();
+    updateProfilesFromPosts();
+    alert('Blog data loaded.');
+    document.getElementById('json-editor-container').classList.add('hidden');
+    document.getElementById('post-list').classList.remove('hidden');
+  } catch(e) {
+    alert('Invalid JSON');
+  }
+};
+
+// Download JSON
+document.getElementById('download-btn').onclick = function() {
+  const blob = new Blob([JSON.stringify(blogData, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'blog.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+renderPosts();
+updateProfileSel();
+</script>
+</body>
+</html>
