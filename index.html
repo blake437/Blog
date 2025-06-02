@@ -6,12 +6,16 @@
   <style>
     body { font-family: Arial, sans-serif; max-width: 700px; margin: 2em auto; }
     .post { border-bottom: 1px solid #ccc; margin-bottom: 2em; padding-bottom: 1em; }
-    .post-title { font-size: 1.5em; margin: 0.5em 0; }
+    .post-title { font-size: 1.5em; margin: 0.5em 0; cursor:pointer; color:#3366cc; }
     .post-date { color: #888; font-size: 0.9em; margin-bottom: 0.5em; }
     .post-tags { font-size: 0.9em; color: #456; margin-bottom: 0.5em; }
     .post-type { font-size: 0.9em; color: #367; margin-bottom: 0.5em; }
+    .post-author { font-size: 0.9em; color: #555; margin-bottom: 0.5em; }
     .controls { margin-bottom: 1.5em; }
     .controls input, .controls select { margin-right: 0.7em; padding: 0.4em; }
+    .modal-bg { display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.5); z-index:100; }
+    .modal { background:white; max-width:500px; margin:5% auto; padding:2em; border-radius:6px; box-shadow:0 2px 12px rgba(0,0,0,0.2); position:relative; }
+    .modal-close { position:absolute; top:0.5em; right:1em; cursor:pointer; }
   </style>
 </head>
 <body>
@@ -23,12 +27,25 @@
     <select id="filter-type">
       <option value="">Filter by Type</option>
     </select>
-    <input type="date" id="filter-date">
+    <select id="filter-author">
+      <option value="">Filter by Author</option>
+    </select>
+    <label>Date from: <input type="date" id="filter-date-from"></label>
+    <label>Date to: <input type="date" id="filter-date-to"></label>
     <input type="text" id="search-input" placeholder="Search posts...">
     <button id="search-btn">Search</button>
     <button id="reset-btn">Reset</button>
+    <a href="editor.html?data=" id="edit-link" style="margin-left:2em;">Edit Blog</a>
   </div>
   <div id="posts"></div>
+
+  <!-- Modal for post detail -->
+  <div class="modal-bg" id="modal-bg">
+    <div class="modal" id="modal-content">
+      <span class="modal-close" id="modal-close">&times;</span>
+      <div id="modal-body"></div>
+    </div>
+  </div>
 
 <script>
 const blogData = {
@@ -39,28 +56,32 @@ const blogData = {
       "date": "2025-06-01",
       "tags": ["intro", "welcome"],
       "type": "Article",
-      "content": "Welcome to my first blog post! This is filled from JSON."
+      "content": "Welcome to my first blog post! This is filled from JSON.",
+      "author": "alice"
     },
     {
       "title": "Another Day, Another Post",
       "date": "2025-06-02",
       "tags": ["daily", "update"],
       "type": "Article",
-      "content": "Here's another entry to my blog, also loaded automatically."
+      "content": "Here's another entry to my blog, also loaded automatically.",
+      "author": "bob"
     },
     {
       "title": "Tech News",
       "date": "2025-06-02",
       "tags": ["news", "tech"],
       "type": "News",
-      "content": "Today's tech news is all about AI and robotics."
+      "content": "Today's tech news is all about AI and robotics.",
+      "author": "alice"
     },
     {
       "title": "JavaScript Tutorial",
       "date": "2025-06-01",
       "tags": ["tutorial", "javascript"],
       "type": "Tutorial",
-      "content": "Learn JavaScript in this step-by-step tutorial."
+      "content": "Learn JavaScript in this step-by-step tutorial.",
+      "author": "carol"
     }
   ]
 };
@@ -69,18 +90,11 @@ document.title = blogData.title;
 document.getElementById('blog-title').textContent = blogData.title;
 
 // Populate filter dropdowns
-const filterTitle = document.getElementById('filter-titles');
 const filterTags = document.getElementById('filter-tags');
 const filterType = document.getElementById('filter-type');
-const filterDate = document.getElementById('filter-date');
-
-const uniqueTitles = [...new Set(blogData.posts.map(post => post.title))];
-uniqueTitles.forEach(title => {
-  const opt = document.createElement('option');
-  opt.value = title;
-  opt.textContent = title;
-  filterTitle.appendChild(opt);
-});
+const filterAuthor = document.getElementById('filter-author');
+const filterDateFrom = document.getElementById('filter-date-from');
+const filterDateTo = document.getElementById('filter-date-to');
 
 const allTags = [...new Set(blogData.posts.flatMap(post => post.tags))];
 allTags.forEach(tag => {
@@ -98,7 +112,29 @@ allTypes.forEach(type => {
   filterType.appendChild(opt);
 });
 
+const allAuthors = [...new Set(blogData.posts.map(post => post.author))];
+allAuthors.forEach(author => {
+  const opt = document.createElement('option');
+  opt.value = author;
+  opt.textContent = author;
+  filterAuthor.appendChild(opt);
+});
+
 const postsDiv = document.getElementById('posts');
+
+// Modal logic
+const modalBg = document.getElementById('modal-bg');
+const modalBody = document.getElementById('modal-body');
+const modalClose = document.getElementById('modal-close');
+function openModal(contentHtml) {
+  modalBody.innerHTML = contentHtml;
+  modalBg.style.display = 'block';
+}
+function closeModal() {
+  modalBg.style.display = 'none';
+}
+modalClose.onclick = closeModal;
+modalBg.onclick = function(e) { if(e.target===modalBg) closeModal(); };
 
 function renderPosts(posts) {
   postsDiv.innerHTML = '';
@@ -106,13 +142,17 @@ function renderPosts(posts) {
     postsDiv.textContent = 'No posts found.';
     return;
   }
-  posts.forEach(post => {
+  posts.forEach((post, idx) => {
     const postDiv = document.createElement('div');
     postDiv.className = 'post';
 
     const postTitle = document.createElement('div');
     postTitle.className = 'post-title';
     postTitle.textContent = post.title;
+    postTitle.tabIndex = 0;
+    postTitle.style.textDecoration = "underline";
+    postTitle.addEventListener('click', () => showPostDetail(post));
+    postTitle.addEventListener('keydown', e => { if(e.key==='Enter') showPostDetail(post); });
 
     const postDate = document.createElement('div');
     postDate.className = 'post-date';
@@ -126,6 +166,10 @@ function renderPosts(posts) {
     postType.className = 'post-type';
     postType.textContent = 'Type: ' + post.type;
 
+    const postAuthor = document.createElement('div');
+    postAuthor.className = 'post-author';
+    postAuthor.textContent = 'Author: ' + post.author;
+
     const postContent = document.createElement('div');
     postContent.className = 'post-content';
     postContent.textContent = post.content;
@@ -134,63 +178,87 @@ function renderPosts(posts) {
     postDiv.appendChild(postDate);
     postDiv.appendChild(postTags);
     postDiv.appendChild(postType);
+    postDiv.appendChild(postAuthor);
     postDiv.appendChild(postContent);
 
     postsDiv.appendChild(postDiv);
   });
 }
 
+function showPostDetail(post) {
+  openModal(`
+    <h2>${post.title}</h2>
+    <div><b>Date:</b> ${post.date}</div>
+    <div><b>Tags:</b> ${post.tags.join(', ')}</div>
+    <div><b>Type:</b> ${post.type}</div>
+    <div><b>Author:</b> ${post.author}</div>
+    <hr>
+    <div>${post.content.replace(/\n/g,'<br>')}</div>
+  `);
+}
+
 // Initial render
 renderPosts(blogData.posts);
 
 function filterAndSearch() {
-  const selectedTitle = filterTitle.value;
   const selectedTags = Array.from(filterTags.selectedOptions).map(opt => opt.value).filter(Boolean);
   const selectedType = filterType.value;
-  const selectedDate = filterDate.value;
+  const selectedAuthor = filterAuthor.value;
+  const dateFrom = filterDateFrom.value;
+  const dateTo = filterDateTo.value;
   const searchText = document.getElementById('search-input').value.trim().toLowerCase();
 
   let filtered = blogData.posts;
 
-  if (selectedTitle) {
-    filtered = filtered.filter(post => post.title === selectedTitle);
-  }
   if (selectedTags.length > 0) {
     filtered = filtered.filter(post => selectedTags.every(tag => post.tags.includes(tag)));
   }
   if (selectedType) {
     filtered = filtered.filter(post => post.type === selectedType);
   }
-  if (selectedDate) {
-    filtered = filtered.filter(post => post.date === selectedDate);
+  if (selectedAuthor) {
+    filtered = filtered.filter(post => post.author === selectedAuthor);
+  }
+  if (dateFrom) {
+    filtered = filtered.filter(post => post.date >= dateFrom);
+  }
+  if (dateTo) {
+    filtered = filtered.filter(post => post.date <= dateTo);
   }
   if (searchText) {
     filtered = filtered.filter(post =>
       post.title.toLowerCase().includes(searchText) ||
       post.content.toLowerCase().includes(searchText) ||
       post.tags.some(tag => tag.toLowerCase().includes(searchText)) ||
-      post.type.toLowerCase().includes(searchText)
+      post.type.toLowerCase().includes(searchText) ||
+      (post.author && post.author.toLowerCase().includes(searchText))
     );
   }
   renderPosts(filtered);
 }
 
-filterTitle.addEventListener('change', filterAndSearch);
 filterTags.addEventListener('change', filterAndSearch);
 filterType.addEventListener('change', filterAndSearch);
-filterDate.addEventListener('change', filterAndSearch);
+filterAuthor.addEventListener('change', filterAndSearch);
+filterDateFrom.addEventListener('change', filterAndSearch);
+filterDateTo.addEventListener('change', filterAndSearch);
 document.getElementById('search-btn').addEventListener('click', filterAndSearch);
 document.getElementById('search-input').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') filterAndSearch();
 });
 document.getElementById('reset-btn').addEventListener('click', function() {
-  filterTitle.value = '';
   filterTags.selectedIndex = -1;
   filterType.value = '';
-  filterDate.value = '';
+  filterAuthor.value = '';
+  filterDateFrom.value = '';
+  filterDateTo.value = '';
   document.getElementById('search-input').value = '';
   renderPosts(blogData.posts);
 });
+
+// Pass blogData as URL-encoded JSON to editor.html
+const editLink = document.getElementById('edit-link');
+editLink.href = "editor.html?data=" + encodeURIComponent(JSON.stringify(blogData));
 </script>
 </body>
 </html>
