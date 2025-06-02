@@ -1,1 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Loading...</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 700px; margin: 2em auto; }
+    .post { border-bottom: 1px solid #ccc; margin-bottom: 2em; padding-bottom: 1em; }
+    .post-title { font-size: 1.5em; margin: 0.5em 0; }
+    .post-date { color: #888; font-size: 0.9em; margin-bottom: 0.5em; }
+    .post-tags { font-size: 0.9em; color: #456; margin-bottom: 0.5em; }
+    .post-type { font-size: 0.9em; color: #367; margin-bottom: 0.5em; }
+    .controls { margin-bottom: 1.5em; }
+    .controls input, .controls select { margin-right: 0.7em; padding: 0.4em; }
+  </style>
+</head>
+<body>
+  <h1 id="blog-title">Loading...</h1>
+  <div class="controls">
+    <select id="filter-titles">
+      <option value="">Filter by Title</option>
+    </select>
+    <select id="filter-tags" multiple size="1" style="min-width:120px;">
+      <option value="">Filter by Tag</option>
+    </select>
+    <select id="filter-type">
+      <option value="">Filter by Type</option>
+    </select>
+    <input type="date" id="filter-date">
+    <input type="text" id="search-input" placeholder="Search posts...">
+    <button id="search-btn">Search</button>
+    <button id="reset-btn">Reset</button>
+  </div>
+  <div id="posts"></div>
 
+<script>
+const blogData = {
+  "title": "My Awesome Blog",
+  "posts": [
+    {
+      "title": "First Post",
+      "date": "2025-06-01",
+      "tags": ["intro", "welcome"],
+      "type": "Article",
+      "content": "Welcome to my first blog post! This is filled from JSON."
+    },
+    {
+      "title": "Another Day, Another Post",
+      "date": "2025-06-02",
+      "tags": ["daily", "update"],
+      "type": "Article",
+      "content": "Here's another entry to my blog, also loaded automatically."
+    },
+    {
+      "title": "Tech News",
+      "date": "2025-06-02",
+      "tags": ["news", "tech"],
+      "type": "News",
+      "content": "Today's tech news is all about AI and robotics."
+    },
+    {
+      "title": "JavaScript Tutorial",
+      "date": "2025-06-01",
+      "tags": ["tutorial", "javascript"],
+      "type": "Tutorial",
+      "content": "Learn JavaScript in this step-by-step tutorial."
+    }
+  ]
+};
+
+document.title = blogData.title;
+document.getElementById('blog-title').textContent = blogData.title;
+
+// Populate filter dropdowns
+const filterTitle = document.getElementById('filter-titles');
+const filterTags = document.getElementById('filter-tags');
+const filterType = document.getElementById('filter-type');
+const filterDate = document.getElementById('filter-date');
+
+const uniqueTitles = [...new Set(blogData.posts.map(post => post.title))];
+uniqueTitles.forEach(title => {
+  const opt = document.createElement('option');
+  opt.value = title;
+  opt.textContent = title;
+  filterTitle.appendChild(opt);
+});
+
+const allTags = [...new Set(blogData.posts.flatMap(post => post.tags))];
+allTags.forEach(tag => {
+  const opt = document.createElement('option');
+  opt.value = tag;
+  opt.textContent = tag;
+  filterTags.appendChild(opt);
+});
+
+const allTypes = [...new Set(blogData.posts.map(post => post.type))];
+allTypes.forEach(type => {
+  const opt = document.createElement('option');
+  opt.value = type;
+  opt.textContent = type;
+  filterType.appendChild(opt);
+});
+
+const postsDiv = document.getElementById('posts');
+
+function renderPosts(posts) {
+  postsDiv.innerHTML = '';
+  if (posts.length === 0) {
+    postsDiv.textContent = 'No posts found.';
+    return;
+  }
+  posts.forEach(post => {
+    const postDiv = document.createElement('div');
+    postDiv.className = 'post';
+
+    const postTitle = document.createElement('div');
+    postTitle.className = 'post-title';
+    postTitle.textContent = post.title;
+
+    const postDate = document.createElement('div');
+    postDate.className = 'post-date';
+    postDate.textContent = post.date;
+
+    const postTags = document.createElement('div');
+    postTags.className = 'post-tags';
+    postTags.textContent = 'Tags: ' + post.tags.join(', ');
+
+    const postType = document.createElement('div');
+    postType.className = 'post-type';
+    postType.textContent = 'Type: ' + post.type;
+
+    const postContent = document.createElement('div');
+    postContent.className = 'post-content';
+    postContent.textContent = post.content;
+
+    postDiv.appendChild(postTitle);
+    postDiv.appendChild(postDate);
+    postDiv.appendChild(postTags);
+    postDiv.appendChild(postType);
+    postDiv.appendChild(postContent);
+
+    postsDiv.appendChild(postDiv);
+  });
+}
+
+// Initial render
+renderPosts(blogData.posts);
+
+function filterAndSearch() {
+  const selectedTitle = filterTitle.value;
+  const selectedTags = Array.from(filterTags.selectedOptions).map(opt => opt.value).filter(Boolean);
+  const selectedType = filterType.value;
+  const selectedDate = filterDate.value;
+  const searchText = document.getElementById('search-input').value.trim().toLowerCase();
+
+  let filtered = blogData.posts;
+
+  if (selectedTitle) {
+    filtered = filtered.filter(post => post.title === selectedTitle);
+  }
+  if (selectedTags.length > 0) {
+    filtered = filtered.filter(post => selectedTags.every(tag => post.tags.includes(tag)));
+  }
+  if (selectedType) {
+    filtered = filtered.filter(post => post.type === selectedType);
+  }
+  if (selectedDate) {
+    filtered = filtered.filter(post => post.date === selectedDate);
+  }
+  if (searchText) {
+    filtered = filtered.filter(post =>
+      post.title.toLowerCase().includes(searchText) ||
+      post.content.toLowerCase().includes(searchText) ||
+      post.tags.some(tag => tag.toLowerCase().includes(searchText)) ||
+      post.type.toLowerCase().includes(searchText)
+    );
+  }
+  renderPosts(filtered);
+}
+
+filterTitle.addEventListener('change', filterAndSearch);
+filterTags.addEventListener('change', filterAndSearch);
+filterType.addEventListener('change', filterAndSearch);
+filterDate.addEventListener('change', filterAndSearch);
+document.getElementById('search-btn').addEventListener('click', filterAndSearch);
+document.getElementById('search-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') filterAndSearch();
+});
+document.getElementById('reset-btn').addEventListener('click', function() {
+  filterTitle.value = '';
+  filterTags.selectedIndex = -1;
+  filterType.value = '';
+  filterDate.value = '';
+  document.getElementById('search-input').value = '';
+  renderPosts(blogData.posts);
+});
+</script>
+</body>
+</html>
