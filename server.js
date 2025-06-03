@@ -55,11 +55,12 @@ app.get('/api/currentUser', (req, res) => {
   const sid = getSessionId(req);
   res.json({ user: currentUser[sid] || null });
 });
-app.post('/api/login', (req, res) => {
-  // Standard login: client validated password
-  const { name } = req.body;
+app.post('/api/login', async (req, res) => {
+  const { name, password } = req.body;
   const user = users.find(u => u.name === name);
   if (!user) return res.status(401).json({ error: "Invalid login" });
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) return res.status(401).json({ error: "Invalid login" });
   const sid = getSessionId(req);
   currentUser[sid] = name;
   res.json({ success: true, user: { name: user.name, role: user.role } });
