@@ -62,7 +62,12 @@
 </div>
 
 <script>
-let sessionId = localStorage.getItem('sessionId') || Math.random().toString(36).slice(2);
+function generateSecureSessionId() {
+  const array = new Uint8Array(16); // 128-bit random value
+  window.crypto.getRandomValues(array);
+  return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+}
+let sessionId = localStorage.getItem('sessionId') || generateSecureSessionId();
 localStorage.setItem('sessionId', sessionId);
 let currentUser = null;
 let allUsers = [];
