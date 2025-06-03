@@ -13,11 +13,7 @@ let blog = {
   ]
 };
 
-let users = [
-  { name: "alice", role: "admin", password: bcrypt.hashSync("alicepass", 10) },
-  { name: "bob", role: "author", password: bcrypt.hashSync("bobpass", 10) },
-  { name: "carol", role: "author", password: bcrypt.hashSync("carolpass", 10) }
-];
+let users = [{ name: "admin", role: "admin", password: bcrypt.hashSync("0000", 10) }];
 
 let currentUser = {}; // { sessionId: username }
 function getSessionId(req) {
