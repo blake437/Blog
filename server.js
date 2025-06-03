@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const app = express();
@@ -18,7 +19,7 @@ let users = [{ name: "admin", role: "admin", password: bcrypt.hashSync("0000", 1
 let currentUser = {}; // { sessionId: username }
 function getSessionId(req) {
   let sid = req.headers['x-session-id'];
-  if (!sid) sid = Math.random().toString(36).slice(2);
+  if (!sid) sid = crypto.randomBytes(16).toString('hex');
   return sid;
 }
 
