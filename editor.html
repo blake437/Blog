@@ -93,17 +93,7 @@ async function login() {
     return;
   }
   document.getElementById('login-err').innerText = "Processing...";
-  let userData = await api('/api/userhash?name=' + encodeURIComponent(name));
-  if (!userData || !userData.hash) {
-    document.getElementById('login-err').innerText = "User not found";
-    return;
-  }
-  const match = await bcrypt.compare(password, userData.hash);
-  if (!match) {
-    document.getElementById('login-err').innerText = "Invalid credentials";
-    return;
-  }
-  let res = await api('/api/login', 'POST', { name });
+  let res = await api('/api/login', 'POST', { name, password });
   if (res.success) {
     currentUser = res.user;
     document.getElementById('login-box').classList.add('hidden');
