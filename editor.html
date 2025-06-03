@@ -42,7 +42,10 @@
   <ul id="user-list"></ul>
   <h3>Create User</h3>
   <input id="new-user-name" placeholder="Username">
-  <input id="new-user-role" placeholder="Role (admin/author)">
+  <select id="new-user-role">
+    <option value="admin">admin</option>
+    <option value="author">author</option>
+  </select>
   <input id="new-user-pass" type="password" placeholder="Password">
   <button onclick="createUser()">Create</button>
   <div id="new-user-res"></div>
