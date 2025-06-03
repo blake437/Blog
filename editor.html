@@ -1,509 +1,249 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>Edit Blog</title>
+  <meta charset="utf-8">
+  <title>Blog Editor</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 820px; margin: 2em auto; }
-    .controls { margin-bottom: 2em; }
-    .controls input, .controls select { margin-right: 0.7em; padding: 0.4em; }
-    .profile-sel { margin-bottom: 1.5em; }
-    .post-list { margin-bottom: 3em; }
-    .post-entry { border-bottom: 1px solid #bbb; margin-bottom: 1.2em; padding-bottom: 0.7em; }
-    .post-title { font-size: 1.1em; font-weight:bold; }
-    .post-author { font-size:0.95em; color:#555; }
-    .edit-btn, .del-btn, .grant-btn { margin-left: 0.6em; }
-    label { display: block; margin-top: 0.7em; }
-    textarea { width: 98%; min-height: 80px; }
-    .json-editor { width: 100%; height: 200px; font-family: monospace; margin-top:1em; }
-    .hidden { display: none; }
-    .perm-list { font-size: 0.9em; color: #333; margin-top:0.3em; }
-    .download-btn { margin-top: 1em; }
-    .admin-panel { border: 1px solid #ccc; padding: 1em; margin-bottom: 2em; background: #f9f9f9; }
-    .user-list { margin: 1em 0; }
-    .user-row { display: flex; align-items: center; margin-bottom: 0.5em; }
-    .user-row span { flex: 1; }
-    .user-row select { margin-left: 1em; }
-    .user-row button { margin-left: 0.5em; }
-    .add-user { margin-top: 1em; }
-    /* Modal styles */
-    .modal {
-      display: none;
-      position: fixed; z-index: 1000; left: 0; top: 0;
-      width: 100vw; height: 100vh; overflow: auto;
-      background: rgba(0,0,0,0.5);
-      justify-content: center; align-items: center;
-    }
-    .modal-content {
-      background: #fff; padding: 2em 2em 1em 2em;
-      border-radius: 5px; max-width: 350px; min-width: 250px;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.2);
-    }
-    .modal-content input, .modal-content select, .modal-content button {
-      margin-top: 1em; width: 100%;
-    }
-    .profile-btn {
-      width: 100%; margin: 0.25em 0; padding: 0.6em; font-size: 1em;
-      background: #eee; border: 1px solid #aaa; border-radius: 4px; cursor: pointer;
-    }
-    .profile-btn:hover { background: #f0f8ff; }
-    .modal-title { font-weight: bold; margin-bottom: 1em; text-align: center; }
-    .modal-actions { margin-top: 1em; text-align: center; }
-    .modal .add-user-row { display: flex; gap: 0.5em; margin-top: 1em; }
-    .modal .add-user-row input, .modal .add-user-row select { flex: 1; }
+    /* Add your styles here for forms, etc. */
+    .post-list { margin-top:2em; }
+    .user-list { margin-top:2em; }
   </style>
 </head>
 <body>
-  <h1>Edit Blog</h1>
+  <h1>Blog Editor</h1>
+  <div id="profile"></div>
+  <button id="sign-in-btn">Sign In</button>
+  <button id="sign-out-btn" style="display:none;">Sign Out</button>
 
-  <!-- Profile selection modal -->
-  <div class="modal" id="profile-modal">
-    <div class="modal-content">
-      <div class="modal-title">Select Your Profile</div>
-      <div id="profile-selection"></div>
-      <div class="add-user-row">
-        <input type="text" id="modal-new-username" placeholder="New username">
-        <select id="modal-new-user-role">
-          <option value="author">Author</option>
-          <option value="admin">Admin</option>
-        </select>
-        <button onclick="modalAddUser()">+</button>
-      </div>
+  <h2>Posts</h2>
+  <button id="add-post-btn">Add Post</button>
+  <div class="post-list" id="post-list"></div>
+
+  <h2>Users</h2>
+  <button id="add-user-btn">Add User</button>
+  <div class="user-list" id="user-list"></div>
+
+  <div id="modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
+    <div style="background:#fff;padding:2em;max-width:400px;margin:auto;">
+      <span id="modal-close" style="float:right;cursor:pointer;">&times;</span>
+      <div id="modal-content"></div>
     </div>
   </div>
 
-  <!-- Admin Panel -->
-  <div class="admin-panel" id="admin-panel" style="display:none;">
-    <h3>Admin: Manage Users</h3>
-    <div class="user-list" id="user-list"></div>
-    <div class="add-user">
-      <input type="text" id="new-username" placeholder="New username">
-      <select id="new-user-role">
-        <option value="author">Author</option>
-        <option value="admin">Admin</option>
-      </select>
-      <button onclick="addUser()">Add User</button>
-    </div>
-  </div>
-  <!-- End Admin Panel -->
-
-  <div class="profile-sel">
-    <label>
-      Profile:
-      <span id="current-profile"></span>
-      <button id="change-profile-btn">Change Profile</button>
-    </label>
-    <span id="profile-info"></span>
-  </div>
-  <div class="controls">
-    <button id="add-post-btn">Add Post</button>
-    <button id="toggle-json-btn">Edit JSON Raw</button>
-    <button id="download-btn" class="download-btn">Download JSON</button>
-  </div>
-  <div id="json-editor-container" class="hidden">
-    <textarea id="json-editor" class="json-editor"></textarea>
-    <button id="save-json-btn">Save JSON</button>
-  </div>
-  <div id="post-list" class="post-list"></div>
-  <div id="post-form-container" class="hidden">
-    <h2 id="form-title"></h2>
-    <form id="post-form">
-      <label>Title: <input type="text" id="form-title-input" required></label>
-      <label>Date: <input type="date" id="form-date-input" required></label>
-      <label>Tags (comma separated): <input type="text" id="form-tags-input"></label>
-      <label>Type: <input type="text" id="form-type-input"></label>
-      <label>Content:<br>
-        <textarea id="form-content-input" required></textarea>
-      </label>
-      <label>Author:
-        <input type="text" id="form-author-input" readonly>
-      </label>
-      <button type="submit" id="form-save-btn">Save</button>
-      <button type="button" id="form-cancel-btn">Cancel</button>
-    </form>
-  </div>
 <script>
-// --- Profile Management ---
+let blog = { title: "", posts: [] };
+let users = [];
+let signedInUser = null;
 
-// Default users if not present
-const DEFAULT_USERS = [
-  {name: 'alice', role: 'author'},
-  {name: 'bob', role: 'author'},
-  {name: 'admin', role: 'admin'}
-];
-
-function loadBlogData() {
-  const params = new URLSearchParams(window.location.search);
-  let data = null;
-  if (params.has('data')) {
-    try {
-      data = JSON.parse(decodeURIComponent(params.get('data')));
-    } catch (e) {}
-  }
-  if (!data) data = {title:"Blog", posts:[]};
-  if (!data.users) data.users = DEFAULT_USERS.slice();
-  return data;
+let sessionId = localStorage.getItem('sessionId');
+if (!sessionId) {
+  sessionId = Math.random().toString(36).slice(2);
+  localStorage.setItem('sessionId', sessionId);
 }
 
-let blogData = loadBlogData();
-
-function saveUsersToBlogData(users) {
-  blogData.users = users;
+function fetchWithSession(url, opts = {}) {
+  opts.headers = opts.headers || {};
+  opts.headers['x-session-id'] = sessionId;
+  return fetch(url, opts);
 }
 
-function getUsers() {
-  return blogData.users || [];
+async function loadBlogAndUsers() {
+  const [blogRes, usersRes, userRes] = await Promise.all([
+    fetchWithSession('/api/blog'),
+    fetchWithSession('/api/users'),
+    fetchWithSession('/api/currentUser')
+  ]);
+  blog = await blogRes.json();
+  users = await usersRes.json();
+  const userData = await userRes.json();
+  signedInUser = userData.user;
+  updateProfile();
+  renderPosts();
+  renderUsers();
+}
+window.onload = loadBlogAndUsers;
+
+function updateProfile() {
+  document.getElementById('profile').textContent = signedInUser ? ('Signed in as: ' + signedInUser) : 'Not signed in';
+  document.getElementById('sign-in-btn').style.display = signedInUser ? 'none' : '';
+  document.getElementById('sign-out-btn').style.display = signedInUser ? '' : 'none';
 }
 
-function getCurrentUser() {
-  return localStorage.getItem('currentUser');
-}
-
-function setCurrentUser(username) {
-  localStorage.setItem('currentUser', username);
-}
-
-function clearCurrentUser() {
-  localStorage.removeItem('currentUser');
-}
-
-function requireProfile() {
-  const profile = getCurrentUser();
-  if (!profile) {
-    showProfileModal();
-    return null;
-  }
-  return profile;
-}
-
-let users = getUsers();
-let currentProfileName = getCurrentUser();
-let currentProfile = users.find(p => p.name === currentProfileName) || {name: currentProfileName, role: 'author'};
-
-// ---- Modal profile selection ----
-function showProfileModal() {
-  renderProfileModal();
-  document.getElementById('profile-modal').style.display = 'flex';
-}
-function hideProfileModal() {
-  document.getElementById('profile-modal').style.display = 'none';
-}
-
-function renderProfileModal() {
-  users = getUsers();
-  const container = document.getElementById('profile-selection');
-  container.innerHTML = '';
-  users.forEach(user => {
-    const btn = document.createElement('button');
-    btn.className = 'profile-btn';
-    btn.textContent = `${user.name} (${user.role})`;
-    btn.onclick = () => {
-      setCurrentUser(user.name);
-      currentProfileName = user.name;
-      currentProfile = user;
-      updateProfileInfo();
-      updateProfileAuthorField();
-      hideProfileModal();
-      renderPosts();
-    };
-    container.appendChild(btn);
+document.getElementById('sign-in-btn').onclick = function() {
+  showModal('Sign In', getSignInForm());
+};
+document.getElementById('sign-out-btn').onclick = async function() {
+  await fetchWithSession('/api/currentUser', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ user: null })
   });
-}
-function modalAddUser() {
-  const username = document.getElementById('modal-new-username').value.trim();
-  const role = document.getElementById('modal-new-user-role').value;
-  if (!username) {
-    alert('Enter a username.');
-    return;
-  }
-  users = getUsers();
-  if (users.some(u => u.name === username)) {
-    alert('User already exists.');
-    return;
-  }
-  users.push({name: username, role});
-  saveUsersToBlogData(users);
-  renderProfileModal();
-  renderAdminPanel(); // in case modal was opened by admin
-  document.getElementById('modal-new-username').value = '';
-}
-
-// --- Admin Panel Functions ---
-function renderAdminPanel() {
-  users = getUsers();
-  let html = '';
-  const adminCount = users.filter(u => u.role === 'admin').length;
-  users.forEach((user, idx) => {
-    html += `
-      <div class="user-row">
-        <span>${user.name}</span>
-        <select onchange="changeUserRole(${idx}, this.value)">
-          <option value="author" ${user.role === 'author' ? 'selected' : ''}>Author</option>
-          <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
-        </select>
-        ${user.name !== 'admin' && !(user.role === 'admin' && adminCount <= 1) ? `<button onclick="removeUser(${idx})">Remove</button>` : ''}
-      </div>
-    `;
-  });
-  document.getElementById('user-list').innerHTML = html;
-}
-
-function addUser() {
-  const username = document.getElementById('new-username').value.trim();
-  const role = document.getElementById('new-user-role').value;
-  if (!username) {
-    alert('Enter a username.');
-    return;
-  }
-  users = getUsers();
-  if (users.some(u => u.name === username)) {
-    alert('User already exists.');
-    return;
-  }
-  users.push({name: username, role});
-  saveUsersToBlogData(users);
-  renderAdminPanel();
-  renderProfileModal();
-  updateProfileAuthorField();
-  document.getElementById('new-username').value = '';
-}
-
-function removeUser(idx) {
-  users = getUsers();
-  const user = users[idx];
-  const adminCount = users.filter(u => u.role === 'admin').length;
-  if (user.role === 'admin' && adminCount <= 1) {
-    alert('Cannot remove the last admin user.');
-    return;
-  }
-  if (user.name === currentProfileName) {
-    clearCurrentUser();
-    showProfileModal();
-  }
-  users.splice(idx, 1);
-  saveUsersToBlogData(users);
-  renderAdminPanel();
-  renderProfileModal();
-  updateProfileAuthorField();
-}
-
-function changeUserRole(idx, newRole) {
-  users = getUsers();
-  const adminCount = users.filter(u => u.role === 'admin').length;
-  if (users[idx].role === 'admin' && newRole !== 'admin' && adminCount <= 1) {
-    alert('Cannot remove the last admin.');
-    renderAdminPanel();
-    return;
-  }
-  users[idx].role = newRole;
-  saveUsersToBlogData(users);
-  renderAdminPanel();
-  renderProfileModal();
-  updateProfileAuthorField();
-}
-
-// --- End Admin Panel ---
-
-// --- Blog Logic ---
-if (!blogData.posts) blogData.posts = [];
-blogData.posts.forEach(p=>{if(!p.editors)p.editors=[];});
-
-function updateProfileInfo() {
-  document.getElementById('current-profile').textContent = currentProfile ? `${currentProfile.name} (${currentProfile.role})` : '';
-  document.getElementById('profile-info').textContent =
-    currentProfile && currentProfile.role==='admin'
-      ? 'You can edit any post and assign permissions.'
-      : `You can edit or delete your posts.`;
-}
-function updateProfileAuthorField() {
-  users = getUsers();
-  currentProfileName = getCurrentUser();
-  currentProfile = users.find(p => p.name === currentProfileName) || {name: currentProfileName, role: 'author'};
-  updateProfileInfo();
-  if (currentProfile && currentProfile.role === 'admin') {
-    document.getElementById('admin-panel').style.display = '';
-    renderAdminPanel();
-  } else {
-    document.getElementById('admin-panel').style.display = 'none';
-  }
-}
-
-document.getElementById('change-profile-btn').onclick = function() {
-  clearCurrentUser();
-  showProfileModal();
+  signedInUser = null;
+  updateProfile();
 };
 
-function renderPosts() {
-  const pl = document.getElementById('post-list');
-  pl.innerHTML = '';
-  blogData.posts.forEach((post, i) => {
-    const entry = document.createElement('div');
-    entry.className = 'post-entry';
-    entry.innerHTML = `
-      <span class="post-title">${post.title}</span>
-      <span class="post-author">by ${post.author}</span>
-      <span class="post-date">[${post.date}]</span>
-      <span class="post-type">${post.type||''}</span>
-      <span class="post-tags">${post.tags ? post.tags.join(', ') : ''}</span>
-    `;
-    const canEdit = (currentProfile && (currentProfile.role==='admin' || currentProfile.name===post.author || (post.editors||[]).includes(currentProfile.name)));
-    if (canEdit) {
-      const editBtn = document.createElement('button');
-      editBtn.textContent = 'Edit';
-      editBtn.className = 'edit-btn';
-      editBtn.onclick = () => openForm('edit', i);
-      entry.appendChild(editBtn);
-
-      const delBtn = document.createElement('button');
-      delBtn.textContent = 'Delete';
-      delBtn.className = 'del-btn';
-      delBtn.onclick = () => { if(confirm('Delete this post?')){ blogData.posts.splice(i,1); renderPosts(); updateProfilesFromPosts(); }};
-      entry.appendChild(delBtn);
-    }
-    if (currentProfile && (currentProfile.role==='admin' || currentProfile.name===post.author)) {
-      const grantBtn = document.createElement('button');
-      grantBtn.textContent = 'Grant edit access';
-      grantBtn.className = 'grant-btn';
-      grantBtn.onclick = () => grantEditorUI(i);
-      entry.appendChild(grantBtn);
-    }
-    if(post.editors && post.editors.length)
-      entry.innerHTML += `<div class="perm-list">Editors: ${post.editors.join(', ')}</div>`;
-    pl.appendChild(entry);
+function getSignInForm() {
+  let html = '<select id="signin-user">';
+  users.forEach(u => {
+    html += `<option value="${u.name}">${u.name} (${u.role})</option>`;
   });
-}
-
-function updateProfilesFromPosts() {
-  users = getUsers();
-  updateProfileAuthorField();
-}
-
-function openForm(mode, idx) {
-  document.getElementById('post-form-container').classList.remove('hidden');
-  document.getElementById('post-list').classList.add('hidden');
-  document.getElementById('json-editor-container').classList.add('hidden');
-  const authorField = document.getElementById('form-author-input');
-  authorField.value = currentProfile.name;
-  authorField.readOnly = true;
-
-  if(mode==='edit') {
-    const post = blogData.posts[idx];
-    document.getElementById('form-title').textContent = 'Edit Post';
-    document.getElementById('form-title-input').value = post.title;
-    document.getElementById('form-date-input').value = post.date;
-    document.getElementById('form-tags-input').value = post.tags.join(', ');
-    document.getElementById('form-type-input').value = post.type;
-    document.getElementById('form-content-input').value = post.content;
-    authorField.value = currentProfile.name;
-    document.getElementById('post-form').onsubmit = function(e){
-      e.preventDefault();
-      if (post.author !== currentProfile.name && currentProfile.role !== 'admin' && !(post.editors||[]).includes(currentProfile.name)) {
-        alert('You do not have permission to edit this post.');
-        return false;
-      }
-      post.title = document.getElementById('form-title-input').value;
-      post.date = document.getElementById('form-date-input').value;
-      post.tags = document.getElementById('form-tags-input').value.split(',').map(s=>s.trim()).filter(Boolean);
-      post.type = document.getElementById('form-type-input').value;
-      post.content = document.getElementById('form-content-input').value;
-      post.author = authorField.value;
-      renderPosts(); closeForm();
-      updateProfilesFromPosts();
+  html += '</select> <button id="do-signin">Sign In</button>';
+  setTimeout(() => {
+    document.getElementById('do-signin').onclick = async function() {
+      const username = document.getElementById('signin-user').value;
+      await setCurrentUser(username);
+      closeModal();
+      updateProfile();
     };
-  } else {
-    document.getElementById('form-title').textContent = 'Add Post';
-    document.getElementById('form-title-input').value = '';
-    document.getElementById('form-date-input').value = '';
-    document.getElementById('form-tags-input').value = '';
-    document.getElementById('form-type-input').value = '';
-    document.getElementById('form-content-input').value = '';
-    authorField.value = currentProfile.name;
-    document.getElementById('post-form').onsubmit = function(e){
+  }, 0);
+  return html;
+}
+
+async function setCurrentUser(username) {
+  await fetchWithSession('/api/currentUser', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ user: username })
+  });
+  signedInUser = username;
+}
+
+document.getElementById('add-post-btn').onclick = function() {
+  if (!signedInUser) return showModal('Error', 'You must sign in.');
+  showModal('Add Post', getPostForm());
+};
+function getPostForm(post = {}) {
+  let html = `
+    <form id="post-form">
+      <input type="text" id="post-title" placeholder="Title" value="${post.title || ''}" required><br>
+      <input type="date" id="post-date" value="${post.date || ''}" required><br>
+      <input type="text" id="post-tags" placeholder="Tags (comma separated)" value="${post.tags ? post.tags.join(', ') : ''}"><br>
+      <input type="text" id="post-type" placeholder="Type" value="${post.type || ''}" required><br>
+      <textarea id="post-content" placeholder="Content" required>${post.content || ''}</textarea><br>
+      <button type="submit">Save</button>
+    </form>
+  `;
+  setTimeout(() => {
+    document.getElementById('post-form').onsubmit = async function(e) {
       e.preventDefault();
-      const post = {
-        title: document.getElementById('form-title-input').value,
-        date: document.getElementById('form-date-input').value,
-        tags: document.getElementById('form-tags-input').value.split(',').map(s=>s.trim()).filter(Boolean),
-        type: document.getElementById('form-type-input').value,
-        content: document.getElementById('form-content-input').value,
-        author: authorField.value,
+      const newPost = {
+        title: document.getElementById('post-title').value,
+        date: document.getElementById('post-date').value,
+        tags: document.getElementById('post-tags').value.split(',').map(s=>s.trim()).filter(Boolean),
+        type: document.getElementById('post-type').value,
+        content: document.getElementById('post-content').value,
+        author: signedInUser,
         editors: []
       };
-      blogData.posts.push(post);
-      renderPosts(); closeForm();
-      updateProfilesFromPosts();
+      await addPost(newPost);
+      closeModal();
+      renderPosts();
     };
-  }
-  document.getElementById('form-cancel-btn').onclick = closeForm;
+  }, 0);
+  return html;
+}
+async function addPost(post) {
+  const res = await fetchWithSession('/api/posts', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(post)
+  });
+  const saved = await res.json();
+  blog.posts.push(saved);
 }
 
-function closeForm() {
-  document.getElementById('post-form-container').classList.add('hidden');
-  document.getElementById('post-list').classList.remove('hidden');
+function renderPosts() {
+  const div = document.getElementById('post-list');
+  div.innerHTML = '';
+  blog.posts.forEach((post, idx) => {
+    const d = document.createElement('div');
+    d.innerHTML = `<b>${post.title}</b> by ${post.author} (${post.date}) <button data-idx="${idx}">Edit</button>`;
+    d.querySelector('button').onclick = function() {
+      if (!signedInUser) return showModal('Error', 'You must sign in.');
+      if (post.author !== signedInUser && !(post.editors||[]).includes(signedInUser)) {
+        return showModal('Error', 'You do not have permission to edit this post.');
+      }
+      showModal('Edit Post', getPostForm(post, idx));
+      setTimeout(() => {
+        document.getElementById('post-form').onsubmit = async function(e) {
+          e.preventDefault();
+          post.title = document.getElementById('post-title').value;
+          post.date = document.getElementById('post-date').value;
+          post.tags = document.getElementById('post-tags').value.split(',').map(s=>s.trim()).filter(Boolean);
+          post.type = document.getElementById('post-type').value;
+          post.content = document.getElementById('post-content').value;
+          await editPost(idx, post);
+          closeModal();
+          renderPosts();
+        };
+      }, 0);
+    };
+    div.appendChild(d);
+  });
 }
-document.getElementById('add-post-btn').onclick = () => openForm('add');
-
-function grantEditorUI(idx) {
-  const post = blogData.posts[idx];
-  users = getUsers();
-  const others = users.filter(p => p.role==='author' && p.name!==post.author);
-  const grantee = prompt('Grant edit access to which profile? ('+others.map(p=>p.name).join(', ')+')');
-  if(grantee && others.some(p=>p.name===grantee)) {
-    if(!post.editors) post.editors=[];
-    if(!post.editors.includes(grantee)) post.editors.push(grantee);
-    renderPosts();
-  }
+async function editPost(idx, updated) {
+  const res = await fetchWithSession(`/api/posts/${idx}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(updated)
+  });
+  blog.posts[idx] = await res.json();
 }
 
-document.getElementById('toggle-json-btn').onclick = function(){
-  const c = document.getElementById('json-editor-container');
-  c.classList.toggle('hidden');
-  document.getElementById('post-list').classList.toggle('hidden');
-  document.getElementById('json-editor').value = JSON.stringify(blogData, null, 2);
+document.getElementById('add-user-btn').onclick = function() {
+  showModal('Add User', getUserForm());
 };
-document.getElementById('save-json-btn').onclick = function(){
-  try {
-    blogData = JSON.parse(document.getElementById('json-editor').value);
-    if (!blogData.users) blogData.users = DEFAULT_USERS.slice();
-    renderPosts();
-    updateProfilesFromPosts();
-    renderProfileModal();
-    alert('Blog data loaded.');
-    document.getElementById('json-editor-container').classList.add('hidden');
-    document.getElementById('post-list').classList.remove('hidden');
-  } catch(e) {
-    alert('Invalid JSON');
-  }
-};
+function getUserForm() {
+  let html = `
+    <form id="user-form">
+      <input type="text" id="user-name" placeholder="Username" required><br>
+      <select id="user-role">
+        <option value="author">Author</option>
+        <option value="admin">Admin</option>
+      </select><br>
+      <button type="submit">Save</button>
+    </form>
+  `;
+  setTimeout(() => {
+    document.getElementById('user-form').onsubmit = async function(e) {
+      e.preventDefault();
+      const newUser = {
+        name: document.getElementById('user-name').value,
+        role: document.getElementById('user-role').value
+      };
+      await addUser(newUser);
+      closeModal();
+      renderUsers();
+    };
+  }, 0);
+  return html;
+}
+async function addUser(user) {
+  const res = await fetchWithSession('/api/users', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(user)
+  });
+  const saved = await res.json();
+  users.push(saved);
+}
+function renderUsers() {
+  const div = document.getElementById('user-list');
+  div.innerHTML = '';
+  users.forEach((user, idx) => {
+    div.innerHTML += `<div>${user.name} (${user.role})</div>`;
+  });
+}
 
-document.getElementById('download-btn').onclick = function() {
-  const blob = new Blob([JSON.stringify(blogData, null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'blog.json';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-};
-
-// Initial load: if not signed in, show modal
-window.onload = function() {
-  if (!getCurrentUser()) {
-    showProfileModal();
-  } else {
-    updateProfileAuthorField();
-    renderPosts();
-  }
-};
-
-// Expose admin functions for inline HTML event handlers
-window.addUser = addUser;
-window.removeUser = removeUser;
-window.changeUserRole = changeUserRole;
-window.modalAddUser = modalAddUser;
-
+// Modal helpers
+function showModal(title, content) {
+  document.getElementById('modal-content').innerHTML = `<h3>${title}</h3>${content}`;
+  document.getElementById('modal').style.display = 'flex';
+}
+function closeModal() {
+  document.getElementById('modal').style.display = 'none';
+}
+document.getElementById('modal-close').onclick = closeModal;
 </script>
 </body>
 </html>
