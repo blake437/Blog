@@ -158,4 +158,7 @@ app.delete('/api/posts/:index', requireAuth, (req, res) => {
 });
 
 app.use(express.static('public'));
+
+app.get('/', (req, res) => { res.redirect('/index.html'); });
+
 app.listen(3000, () => console.log('Server running on port 3000'));
