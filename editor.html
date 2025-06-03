@@ -1,249 +1,343 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Blog Editor</title>
+  <meta charset="UTF-8">
+  <title>Blog Editor (Admin Capable)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bcrypt.js/2.4.3/bcrypt.min.js"></script>
   <style>
-    /* Add your styles here for forms, etc. */
-    .post-list { margin-top:2em; }
-    .user-list { margin-top:2em; }
+    body { font-family: Arial, sans-serif; margin: 2em; }
+    .hidden { display: none; }
+    .error { color: red; }
+    .success { color: green; }
+    #login-box, #pw-box, #editor-box, #admin-box { border: 1px solid #ccc; padding: 1em; margin-bottom: 1em; width: 350px; }
+    #logout-btn { margin-left: 1em; }
   </style>
 </head>
 <body>
-  <h1>Blog Editor</h1>
-  <div id="profile"></div>
-  <button id="sign-in-btn">Sign In</button>
-  <button id="sign-out-btn" style="display:none;">Sign Out</button>
 
-  <h2>Posts</h2>
-  <button id="add-post-btn">Add Post</button>
-  <div class="post-list" id="post-list"></div>
+<div id="login-box">
+  <h2>Login</h2>
+  <input id="login-name" placeholder="Username"><br>
+  <input id="login-pass" type="password" placeholder="Password"><br>
+  <button onclick="login()">Login</button>
+  <div id="login-err" class="error"></div>
+</div>
 
-  <h2>Users</h2>
-  <button id="add-user-btn">Add User</button>
-  <div class="user-list" id="user-list"></div>
+<div id="user-info" class="hidden">
+  Logged in as <span id="user-name"></span> (<span id="user-role"></span>)
+  <button id="logout-btn" onclick="logout()">Logout</button>
+</div>
 
-  <div id="modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);align-items:center;justify-content:center;">
-    <div style="background:#fff;padding:2em;max-width:400px;margin:auto;">
-      <span id="modal-close" style="float:right;cursor:pointer;">&times;</span>
-      <div id="modal-content"></div>
-    </div>
-  </div>
+<div id="pw-box" class="hidden">
+  <h2>Change Your Password</h2>
+  <input id="pw-old" type="password" placeholder="Old Password"><br>
+  <input id="pw-new" type="password" placeholder="New Password"><br>
+  <button onclick="changePassword()">Change Password</button>
+  <div id="pw-res"></div>
+</div>
+
+<div id="admin-box" class="hidden">
+  <h2>Admin: User Management</h2>
+  <button onclick="refreshUsers()">Refresh Users</button>
+  <ul id="user-list"></ul>
+  <h3>Create User</h3>
+  <input id="new-user-name" placeholder="Username">
+  <input id="new-user-role" placeholder="Role (admin/author)">
+  <input id="new-user-pass" type="password" placeholder="Password">
+  <button onclick="createUser()">Create</button>
+  <div id="new-user-res"></div>
+</div>
+
+<div id="editor-box" class="hidden">
+  <h2>Blog Editor</h2>
+  <input id="post-title" placeholder="Post Title"><br>
+  <textarea id="post-content" placeholder="Content" rows="4" cols="30"></textarea><br>
+  <span id="as-user-span" class="hidden">
+    Post as: <select id="as-user"></select>
+  </span>
+  <button onclick="addPost()">Add Post</button>
+  <div id="post-res"></div>
+  <h3>Posts</h3>
+  <ul id="post-list"></ul>
+</div>
 
 <script>
-let blog = { title: "", posts: [] };
-let users = [];
-let signedInUser = null;
+let sessionId = localStorage.getItem('sessionId') || Math.random().toString(36).slice(2);
+localStorage.setItem('sessionId', sessionId);
+let currentUser = null;
+let allUsers = [];
 
-let sessionId = localStorage.getItem('sessionId');
-if (!sessionId) {
-  sessionId = Math.random().toString(36).slice(2);
-  localStorage.setItem('sessionId', sessionId);
+function api(path, method = "GET", body) {
+  return fetch(path, {
+    method,
+    headers: { "Content-Type": "application/json", "x-session-id": sessionId },
+    body: body ? JSON.stringify(body) : undefined
+  }).then(r => r.json());
 }
 
-function fetchWithSession(url, opts = {}) {
-  opts.headers = opts.headers || {};
-  opts.headers['x-session-id'] = sessionId;
-  return fetch(url, opts);
+async function hashPassword(password) {
+  const salt = await bcrypt.genSalt(10);
+  return bcrypt.hash(password, salt);
 }
 
-async function loadBlogAndUsers() {
-  const [blogRes, usersRes, userRes] = await Promise.all([
-    fetchWithSession('/api/blog'),
-    fetchWithSession('/api/users'),
-    fetchWithSession('/api/currentUser')
-  ]);
-  blog = await blogRes.json();
-  users = await usersRes.json();
-  const userData = await userRes.json();
-  signedInUser = userData.user;
-  updateProfile();
-  renderPosts();
-  renderUsers();
+async function login() {
+  const name = document.getElementById('login-name').value;
+  const password = document.getElementById('login-pass').value;
+  if (!name || !password) {
+    document.getElementById('login-err').innerText = "Username and password required";
+    return;
+  }
+  document.getElementById('login-err').innerText = "Processing...";
+  let userData = await api('/api/userhash?name=' + encodeURIComponent(name));
+  if (!userData || !userData.hash) {
+    document.getElementById('login-err').innerText = "User not found";
+    return;
+  }
+  const match = await bcrypt.compare(password, userData.hash);
+  if (!match) {
+    document.getElementById('login-err').innerText = "Invalid credentials";
+    return;
+  }
+  let res = await api('/api/login', 'POST', { name });
+  if (res.success) {
+    currentUser = res.user;
+    document.getElementById('login-box').classList.add('hidden');
+    document.getElementById('user-info').classList.remove('hidden');
+    document.getElementById('pw-box').classList.remove('hidden');
+    document.getElementById('editor-box').classList.remove('hidden');
+    document.getElementById('user-name').innerText = currentUser.name;
+    document.getElementById('user-role').innerText = currentUser.role;
+    loadPosts();
+    if (currentUser.role === "admin") {
+      document.getElementById('admin-box').classList.remove('hidden');
+      document.getElementById('as-user-span').classList.remove('hidden');
+      refreshUsers();
+    }
+    document.getElementById('login-pass').value = "";
+    document.getElementById('login-err').innerText = "";
+  } else {
+    document.getElementById('login-err').innerText = res.error || "Login failed";
+  }
 }
-window.onload = loadBlogAndUsers;
 
-function updateProfile() {
-  document.getElementById('profile').textContent = signedInUser ? ('Signed in as: ' + signedInUser) : 'Not signed in';
-  document.getElementById('sign-in-btn').style.display = signedInUser ? 'none' : '';
-  document.getElementById('sign-out-btn').style.display = signedInUser ? '' : 'none';
+function logout() {
+  api('/api/logout', 'POST');
+  currentUser = null;
+  document.getElementById('login-box').classList.remove('hidden');
+  document.getElementById('user-info').classList.add('hidden');
+  document.getElementById('pw-box').classList.add('hidden');
+  document.getElementById('editor-box').classList.add('hidden');
+  document.getElementById('admin-box').classList.add('hidden');
+  document.getElementById('as-user-span').classList.add('hidden');
 }
 
-document.getElementById('sign-in-btn').onclick = function() {
-  showModal('Sign In', getSignInForm());
-};
-document.getElementById('sign-out-btn').onclick = async function() {
-  await fetchWithSession('/api/currentUser', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ user: null })
+async function changePassword() {
+  const oldPw = document.getElementById('pw-old').value;
+  const newPw = document.getElementById('pw-new').value;
+  if (!oldPw || !newPw) {
+    document.getElementById('pw-res').innerText = "Both fields required";
+    return;
+  }
+  document.getElementById('pw-res').innerText = "Processing...";
+  let userData = await api('/api/userhash?name=' + encodeURIComponent(currentUser.name));
+  if (!userData || !userData.hash) {
+    document.getElementById('pw-res').innerText = "User not found";
+    return;
+  }
+  const match = await bcrypt.compare(oldPw, userData.hash);
+  if (!match) {
+    document.getElementById('pw-res').innerText = "Old password incorrect";
+    return;
+  }
+  const newHash = await hashPassword(newPw);
+  let res = await api('/api/changePassword', 'POST', { newHash });
+  if (res.success) {
+    document.getElementById('pw-res').innerText = "Password changed!";
+    document.getElementById('pw-res').className = "success";
+    document.getElementById('pw-old').value = "";
+    document.getElementById('pw-new').value = "";
+  } else {
+    document.getElementById('pw-res').innerText = res.error || "Failed";
+    document.getElementById('pw-res').className = "error";
+  }
+}
+
+// ADMIN: Impersonate
+async function impersonate(user) {
+  let res = await api('/api/admin/impersonate', 'POST', { target: user });
+  if (res.success) {
+    currentUser = res.user;
+    document.getElementById('user-name').innerText = currentUser.name;
+    document.getElementById('user-role').innerText = currentUser.role;
+    loadPosts();
+  }
+}
+
+// ADMIN: Change any user's password
+async function adminChangeUserPassword(user) {
+  const newPw = prompt("Enter new password for " + user + ":");
+  if (!newPw) return;
+  const newHash = await hashPassword(newPw);
+  let res = await api('/api/changePassword', 'POST', { newHash, target: user });
+  alert(res.success ? "Password changed" : "Error: " + (res.error || "Failed"));
+}
+
+// ADMIN: Change user role
+async function adminChangeUserRole(user) {
+  const newRole = prompt("Enter new role (admin/author) for " + user + ":");
+  if (!newRole) return;
+  let res = await api('/api/users/' + encodeURIComponent(user), 'PUT', { role: newRole });
+  alert(res.success ? "Role changed" : "Error: " + (res.error || "Failed"));
+  refreshUsers();
+}
+
+// ADMIN: Delete user
+async function adminDeleteUser(user) {
+  if (!confirm("Delete user " + user + "?")) return;
+  let res = await api('/api/users/' + encodeURIComponent(user), 'DELETE');
+  alert(res.success ? "User deleted" : "Error: " + (res.error || "Failed"));
+  refreshUsers();
+}
+
+// ADMIN: Create user
+async function createUser() {
+  const name = document.getElementById('new-user-name').value;
+  const role = document.getElementById('new-user-role').value;
+  const pass = document.getElementById('new-user-pass').value;
+  if (!name || !role || !pass) {
+    document.getElementById('new-user-res').innerText = "All fields required";
+    return;
+  }
+  const hash = await hashPassword(pass);
+  let res = await api('/api/users', 'POST', { name, role, password: hash });
+  if (res.error) {
+    document.getElementById('new-user-res').innerText = res.error;
+  } else {
+    document.getElementById('new-user-res').innerText = "User created!";
+    document.getElementById('new-user-res').className = "success";
+    refreshUsers();
+  }
+  document.getElementById('new-user-name').value = "";
+  document.getElementById('new-user-role').value = "";
+  document.getElementById('new-user-pass').value = "";
+}
+
+// ADMIN: Refresh user list
+async function refreshUsers() {
+  allUsers = [];
+  // List users by brute force (could add an endpoint to list users for admins)
+  const names = ["alice", "bob", "carol"];
+  for (const name of names) {
+    let user = await api('/api/userinfo?name=' + encodeURIComponent(name));
+    if (user && user.name) allUsers.push(user);
+  }
+  // Optionally, add a dedicated endpoint to list all users for admins
+  let ul = document.getElementById('user-list');
+  ul.innerHTML = "";
+  for (const user of allUsers) {
+    let li = document.createElement('li');
+    li.innerHTML = `
+      <b>${user.name}</b> (${user.role})
+      <button onclick="impersonate('${user.name}')">Sign in as</button>
+      <button onclick="adminChangeUserPassword('${user.name}')">Change Password</button>
+      <button onclick="adminChangeUserRole('${user.name}')">Change Role</button>
+      <button onclick="adminDeleteUser('${user.name}')">Delete</button>
+    `;
+    ul.appendChild(li);
+  }
+  // Also populate asUser select for post-as
+  let sel = document.getElementById('as-user');
+  sel.innerHTML = "";
+  for (const user of allUsers) {
+    let opt = document.createElement('option');
+    opt.value = user.name;
+    opt.innerText = user.name;
+    sel.appendChild(opt);
+  }
+}
+
+async function addPost() {
+  const title = document.getElementById('post-title').value;
+  const content = document.getElementById('post-content').value;
+  let post = { title, content, date: new Date().toISOString().slice(0,10), tags: [], type: "Article" };
+  if (currentUser.role === "admin") {
+    post.asUser = document.getElementById('as-user').value;
+  }
+  let res = await api('/api/posts', 'POST', post);
+  if (res.error) {
+    document.getElementById('post-res').innerText = res.error;
+  } else {
+    document.getElementById('post-res').innerText = "Post added!";
+    document.getElementById('post-res').className = "success";
+    document.getElementById('post-title').value = "";
+    document.getElementById('post-content').value = "";
+    loadPosts();
+  }
+}
+
+async function loadPosts() {
+  let data = await api('/api/blog');
+  let list = data.posts || [];
+  let ul = document.getElementById('post-list');
+  ul.innerHTML = "";
+  list.forEach((post, i) => {
+    let li = document.createElement('li');
+    li.innerHTML = `
+      <b>${post.title}</b> (${post.date}) by <b>${post.author}</b>
+      <br>${post.content}
+    `;
+    if (currentUser.role === "admin" || post.author === currentUser.name) {
+      li.innerHTML += `
+        <button onclick="editPost(${i})">Edit</button>
+        <button onclick="deletePost(${i})">Delete</button>
+      `;
+    }
+    ul.appendChild(li);
   });
-  signedInUser = null;
-  updateProfile();
-};
-
-function getSignInForm() {
-  let html = '<select id="signin-user">';
-  users.forEach(u => {
-    html += `<option value="${u.name}">${u.name} (${u.role})</option>`;
-  });
-  html += '</select> <button id="do-signin">Sign In</button>';
-  setTimeout(() => {
-    document.getElementById('do-signin').onclick = async function() {
-      const username = document.getElementById('signin-user').value;
-      await setCurrentUser(username);
-      closeModal();
-      updateProfile();
-    };
-  }, 0);
-  return html;
 }
 
-async function setCurrentUser(username) {
-  await fetchWithSession('/api/currentUser', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ user: username })
-  });
-  signedInUser = username;
+// Edit/delete post
+async function editPost(idx) {
+  let data = await api('/api/blog');
+  let post = data.posts[idx];
+  let newTitle = prompt("Edit title:", post.title);
+  let newContent = prompt("Edit content:", post.content);
+  if (newTitle !== null && newContent !== null) {
+    let res = await api('/api/posts/' + idx, 'PUT', { title: newTitle, content: newContent });
+    alert(res.error ? res.error : "Updated!");
+    loadPosts();
+  }
+}
+async function deletePost(idx) {
+  if (!confirm("Delete this post?")) return;
+  let res = await api('/api/posts/' + idx, 'DELETE');
+  alert(res.error ? res.error : "Deleted!");
+  loadPosts();
 }
 
-document.getElementById('add-post-btn').onclick = function() {
-  if (!signedInUser) return showModal('Error', 'You must sign in.');
-  showModal('Add Post', getPostForm());
-};
-function getPostForm(post = {}) {
-  let html = `
-    <form id="post-form">
-      <input type="text" id="post-title" placeholder="Title" value="${post.title || ''}" required><br>
-      <input type="date" id="post-date" value="${post.date || ''}" required><br>
-      <input type="text" id="post-tags" placeholder="Tags (comma separated)" value="${post.tags ? post.tags.join(', ') : ''}"><br>
-      <input type="text" id="post-type" placeholder="Type" value="${post.type || ''}" required><br>
-      <textarea id="post-content" placeholder="Content" required>${post.content || ''}</textarea><br>
-      <button type="submit">Save</button>
-    </form>
-  `;
-  setTimeout(() => {
-    document.getElementById('post-form').onsubmit = async function(e) {
-      e.preventDefault();
-      const newPost = {
-        title: document.getElementById('post-title').value,
-        date: document.getElementById('post-date').value,
-        tags: document.getElementById('post-tags').value.split(',').map(s=>s.trim()).filter(Boolean),
-        type: document.getElementById('post-type').value,
-        content: document.getElementById('post-content').value,
-        author: signedInUser,
-        editors: []
-      };
-      await addPost(newPost);
-      closeModal();
-      renderPosts();
-    };
-  }, 0);
-  return html;
-}
-async function addPost(post) {
-  const res = await fetchWithSession('/api/posts', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(post)
-  });
-  const saved = await res.json();
-  blog.posts.push(saved);
-}
-
-function renderPosts() {
-  const div = document.getElementById('post-list');
-  div.innerHTML = '';
-  blog.posts.forEach((post, idx) => {
-    const d = document.createElement('div');
-    d.innerHTML = `<b>${post.title}</b> by ${post.author} (${post.date}) <button data-idx="${idx}">Edit</button>`;
-    d.querySelector('button').onclick = function() {
-      if (!signedInUser) return showModal('Error', 'You must sign in.');
-      if (post.author !== signedInUser && !(post.editors||[]).includes(signedInUser)) {
-        return showModal('Error', 'You do not have permission to edit this post.');
+// On page load, check session
+async function checkSession() {
+  let res = await api('/api/currentUser');
+  if (res.user) {
+    let userInfo = await api('/api/userinfo?name=' + encodeURIComponent(res.user));
+    if (userInfo && userInfo.name) {
+      currentUser = userInfo;
+      document.getElementById('login-box').classList.add('hidden');
+      document.getElementById('user-info').classList.remove('hidden');
+      document.getElementById('pw-box').classList.remove('hidden');
+      document.getElementById('editor-box').classList.remove('hidden');
+      document.getElementById('user-name').innerText = currentUser.name;
+      document.getElementById('user-role').innerText = currentUser.role;
+      loadPosts();
+      if (currentUser.role === "admin") {
+        document.getElementById('admin-box').classList.remove('hidden');
+        document.getElementById('as-user-span').classList.remove('hidden');
+        refreshUsers();
       }
-      showModal('Edit Post', getPostForm(post, idx));
-      setTimeout(() => {
-        document.getElementById('post-form').onsubmit = async function(e) {
-          e.preventDefault();
-          post.title = document.getElementById('post-title').value;
-          post.date = document.getElementById('post-date').value;
-          post.tags = document.getElementById('post-tags').value.split(',').map(s=>s.trim()).filter(Boolean);
-          post.type = document.getElementById('post-type').value;
-          post.content = document.getElementById('post-content').value;
-          await editPost(idx, post);
-          closeModal();
-          renderPosts();
-        };
-      }, 0);
-    };
-    div.appendChild(d);
-  });
+    }
+  }
 }
-async function editPost(idx, updated) {
-  const res = await fetchWithSession(`/api/posts/${idx}`, {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(updated)
-  });
-  blog.posts[idx] = await res.json();
-}
-
-document.getElementById('add-user-btn').onclick = function() {
-  showModal('Add User', getUserForm());
-};
-function getUserForm() {
-  let html = `
-    <form id="user-form">
-      <input type="text" id="user-name" placeholder="Username" required><br>
-      <select id="user-role">
-        <option value="author">Author</option>
-        <option value="admin">Admin</option>
-      </select><br>
-      <button type="submit">Save</button>
-    </form>
-  `;
-  setTimeout(() => {
-    document.getElementById('user-form').onsubmit = async function(e) {
-      e.preventDefault();
-      const newUser = {
-        name: document.getElementById('user-name').value,
-        role: document.getElementById('user-role').value
-      };
-      await addUser(newUser);
-      closeModal();
-      renderUsers();
-    };
-  }, 0);
-  return html;
-}
-async function addUser(user) {
-  const res = await fetchWithSession('/api/users', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(user)
-  });
-  const saved = await res.json();
-  users.push(saved);
-}
-function renderUsers() {
-  const div = document.getElementById('user-list');
-  div.innerHTML = '';
-  users.forEach((user, idx) => {
-    div.innerHTML += `<div>${user.name} (${user.role})</div>`;
-  });
-}
-
-// Modal helpers
-function showModal(title, content) {
-  document.getElementById('modal-content').innerHTML = `<h3>${title}</h3>${content}`;
-  document.getElementById('modal').style.display = 'flex';
-}
-function closeModal() {
-  document.getElementById('modal').style.display = 'none';
-}
-document.getElementById('modal-close').onclick = closeModal;
+checkSession();
 </script>
 </body>
 </html>
