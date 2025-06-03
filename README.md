@@ -1,8 +1,8 @@
-#Blog#
+# Blog #
 
 A simple blog application built with Node.js and JavaScript.
 
-##Features##
+## Features ##
 
 Create, edit, and delete blog posts
 View all posts in a user-friendly interface
@@ -11,14 +11,14 @@ Basic server setup using Express (see server.js)
 Easily customizable and extensible
 Getting Started
 
-##Prerequisites##
+## Prerequisites ##
 
 Node.js (version 12 or higher)
 npm (usually comes with Node.js)
 
-##Installation##
+## Installation ##
 
-1. Clone the repository:##
+1. Clone the repository:
 
 ```bash
 git clone https://github.com/blake437/Blog.git
@@ -31,7 +31,7 @@ cd Blog
 npm install
 ```
 
-##Running the Application
+## Running the Application ##
 
 Start the server with:
 
@@ -40,16 +40,16 @@ node server.js
 By default, the server will run on http://localhost:3000.
 ```
 
-##Usage
+## Usage ##
 
 Open your browser and navigate to http://localhost:3000 to use the blog.
 Use the interface to view or manage blog posts. By default, there is an admin with username 'admin' and password '0000'
 
-##Contributing
+## Contributing ##
 
 Contributions are welcome! Please open issues or pull requests for suggestions and improvements.
 
-##License
+## License ##
 
 This project is licensed under the MIT License.
 
