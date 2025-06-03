@@ -1,21 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
+  <meta charset="utf-8">
   <title>Loading...</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 700px; margin: 2em auto; }
-    .post { border-bottom: 1px solid #ccc; margin-bottom: 2em; padding-bottom: 1em; }
-    .post-title { font-size: 1.5em; margin: 0.5em 0; cursor:pointer; color:#3366cc; }
-    .post-date { color: #888; font-size: 0.9em; margin-bottom: 0.5em; }
-    .post-tags { font-size: 0.9em; color: #456; margin-bottom: 0.5em; }
-    .post-type { font-size: 0.9em; color: #367; margin-bottom: 0.5em; }
-    .post-author { font-size: 0.9em; color: #555; margin-bottom: 0.5em; }
-    .controls { margin-bottom: 1.5em; }
-    .controls input, .controls select { margin-right: 0.7em; padding: 0.4em; }
-    .modal-bg { display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.5); z-index:100; }
-    .modal { background:white; max-width:500px; margin:5% auto; padding:2em; border-radius:6px; box-shadow:0 2px 12px rgba(0,0,0,0.2); position:relative; }
-    .modal-close { position:absolute; top:0.5em; right:1em; cursor:pointer; }
+    /* Add your styles here as needed */
+    .post { border: 1px solid #ccc; margin: 1em 0; padding: 1em; }
+    .post-title { font-weight: bold; font-size: 1.2em; cursor: pointer; }
+    .modal-bg { position: fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); display:none; align-items:center; justify-content:center;}
+    .modal { background:#fff; padding:2em; border-radius:8px; max-width:600px; width:90%; }
+    .modal-close { float:right; cursor:pointer; }
   </style>
 </head>
 <body>
@@ -35,141 +29,109 @@
     <input type="text" id="search-input" placeholder="Search posts...">
     <button id="search-btn">Search</button>
     <button id="reset-btn">Reset</button>
-    <a href="editor.html?data=" id="edit-link" style="margin-left:2em;">Edit Blog</a>
+    <a href="editor.html" id="edit-link" style="margin-left:2em;">Edit Blog</a>
+    <span id="current-user"></span>
+    <button id="sign-out-btn" style="display:none;">Sign Out</button>
   </div>
   <div id="posts"></div>
-
-  <!-- Modal for post detail -->
   <div class="modal-bg" id="modal-bg">
     <div class="modal" id="modal-content">
       <span class="modal-close" id="modal-close">&times;</span>
       <div id="modal-body"></div>
     </div>
   </div>
-
 <script>
-const blogData = {
-  "title": "My Blog",
-  "posts": [
-    {
-      "title": "First Post",
-      "date": "2025-06-01",
-      "tags": ["intro", "welcome"],
-      "type": "Article",
-      "content": "Welcome to my first blog post! This is filled from JSON.",
-      "author": "alice"
-    },
-    {
-      "title": "Another Day, Another Post",
-      "date": "2025-06-02",
-      "tags": ["daily", "update"],
-      "type": "Article",
-      "content": "Here's another entry to my blog, also loaded automatically.",
-      "author": "bob"
-    },
-    {
-      "title": "Tech News",
-      "date": "2025-06-02",
-      "tags": ["news", "tech"],
-      "type": "News",
-      "content": "Today's tech news is all about AI and robotics.",
-      "author": "alice"
-    },
-    {
-      "title": "JavaScript Tutorial",
-      "date": "2025-06-01",
-      "tags": ["tutorial", "javascript"],
-      "type": "Tutorial",
-      "content": "Learn JavaScript in this step-by-step tutorial.",
-      "author": "carol"
-    }
-  ]
-};
+let blog = { title: "", posts: [] };
+let users = [];
+let signedInUser = null;
 
-document.title = blogData.title;
-document.getElementById('blog-title').textContent = blogData.title;
-
-// Populate filter dropdowns
-const filterTags = document.getElementById('filter-tags');
-const filterType = document.getElementById('filter-type');
-const filterAuthor = document.getElementById('filter-author');
-const filterDateFrom = document.getElementById('filter-date-from');
-const filterDateTo = document.getElementById('filter-date-to');
-
-const allTags = [...new Set(blogData.posts.flatMap(post => post.tags))];
-allTags.forEach(tag => {
-  const opt = document.createElement('option');
-  opt.value = tag;
-  opt.textContent = tag;
-  filterTags.appendChild(opt);
-});
-
-const allTypes = [...new Set(blogData.posts.map(post => post.type))];
-allTypes.forEach(type => {
-  const opt = document.createElement('option');
-  opt.value = type;
-  opt.textContent = type;
-  filterType.appendChild(opt);
-});
-
-const allAuthors = [...new Set(blogData.posts.map(post => post.author))];
-allAuthors.forEach(author => {
-  const opt = document.createElement('option');
-  opt.value = author;
-  opt.textContent = author;
-  filterAuthor.appendChild(opt);
-});
-
-const postsDiv = document.getElementById('posts');
-
-// Modal logic
-const modalBg = document.getElementById('modal-bg');
-const modalBody = document.getElementById('modal-body');
-const modalClose = document.getElementById('modal-close');
-function openModal(contentHtml) {
-  modalBody.innerHTML = contentHtml;
-  modalBg.style.display = 'block';
+let sessionId = localStorage.getItem('sessionId');
+if (!sessionId) {
+  sessionId = Math.random().toString(36).slice(2);
+  localStorage.setItem('sessionId', sessionId);
 }
-function closeModal() {
-  modalBg.style.display = 'none';
+
+function fetchWithSession(url, opts = {}) {
+  opts.headers = opts.headers || {};
+  opts.headers['x-session-id'] = sessionId;
+  return fetch(url, opts);
 }
-modalClose.onclick = closeModal;
-modalBg.onclick = function(e) { if(e.target===modalBg) closeModal(); };
+
+async function loadBlogAndUsers() {
+  const [blogRes, usersRes, userRes] = await Promise.all([
+    fetchWithSession('/api/blog'),
+    fetchWithSession('/api/users'),
+    fetchWithSession('/api/currentUser')
+  ]);
+  blog = await blogRes.json();
+  users = await usersRes.json();
+  const userData = await userRes.json();
+  signedInUser = userData.user;
+  updateUI();
+}
+
+function updateUI() {
+  document.title = blog.title;
+  document.getElementById('blog-title').textContent = blog.title;
+  populateFilters();
+  renderPosts(blog.posts);
+  document.getElementById('current-user').textContent = signedInUser ? ('Signed in as: ' + signedInUser) : 'Not signed in';
+  document.getElementById('sign-out-btn').style.display = signedInUser ? '' : 'none';
+}
+
+function populateFilters() {
+  const filterTags = document.getElementById('filter-tags');
+  const filterType = document.getElementById('filter-type');
+  const filterAuthor = document.getElementById('filter-author');
+  filterTags.innerHTML = '<option value="">Filter by Tag</option>';
+  filterType.innerHTML = '<option value="">Filter by Type</option>';
+  filterAuthor.innerHTML = '<option value="">Filter by Author</option>';
+
+  const allTags = [...new Set(blog.posts.flatMap(post => post.tags))];
+  allTags.forEach(tag => {
+    const opt = document.createElement('option');
+    opt.value = tag;
+    opt.textContent = tag;
+    filterTags.appendChild(opt);
+  });
+  const allTypes = [...new Set(blog.posts.map(post => post.type))];
+  allTypes.forEach(type => {
+    const opt = document.createElement('option');
+    opt.value = type;
+    opt.textContent = type;
+    filterType.appendChild(opt);
+  });
+  const allAuthors = [...new Set(blog.posts.map(post => post.author))];
+  allAuthors.forEach(author => {
+    const opt = document.createElement('option');
+    opt.value = author;
+    opt.textContent = author;
+    filterAuthor.appendChild(opt);
+  });
+}
 
 function renderPosts(posts) {
+  const postsDiv = document.getElementById('posts');
   postsDiv.innerHTML = '';
-  if (posts.length === 0) {
-    postsDiv.textContent = 'No posts found.';
-    return;
-  }
-  posts.forEach((post, idx) => {
+  posts.forEach(post => {
     const postDiv = document.createElement('div');
     postDiv.className = 'post';
-
     const postTitle = document.createElement('div');
     postTitle.className = 'post-title';
     postTitle.textContent = post.title;
-    postTitle.tabIndex = 0;
-    postTitle.style.textDecoration = "underline";
-    postTitle.addEventListener('click', () => showPostDetail(post));
-    postTitle.addEventListener('keydown', e => { if(e.key==='Enter') showPostDetail(post); });
-
+    postTitle.onclick = () => showPostDetail(post);
     const postDate = document.createElement('div');
     postDate.className = 'post-date';
-    postDate.textContent = post.date;
-
+    postDate.textContent = 'Date: ' + post.date;
     const postTags = document.createElement('div');
     postTags.className = 'post-tags';
     postTags.textContent = 'Tags: ' + post.tags.join(', ');
-
     const postType = document.createElement('div');
     postType.className = 'post-type';
     postType.textContent = 'Type: ' + post.type;
-
     const postAuthor = document.createElement('div');
     postAuthor.className = 'post-author';
     postAuthor.textContent = 'Author: ' + post.author;
-
     const postContent = document.createElement('div');
     postContent.className = 'post-content';
     postContent.textContent = post.content;
@@ -197,10 +159,20 @@ function showPostDetail(post) {
   `);
 }
 
-// Initial render
-renderPosts(blogData.posts);
+function openModal(html) {
+  document.getElementById('modal-body').innerHTML = html;
+  document.getElementById('modal-bg').style.display = 'flex';
+}
+document.getElementById('modal-close').onclick = function(){
+  document.getElementById('modal-bg').style.display = 'none';
+};
 
 function filterAndSearch() {
+  const filterTags = document.getElementById('filter-tags');
+  const filterType = document.getElementById('filter-type');
+  const filterAuthor = document.getElementById('filter-author');
+  const filterDateFrom = document.getElementById('filter-date-from');
+  const filterDateTo = document.getElementById('filter-date-to');
   const selectedTags = Array.from(filterTags.selectedOptions).map(opt => opt.value).filter(Boolean);
   const selectedType = filterType.value;
   const selectedAuthor = filterAuthor.value;
@@ -208,7 +180,7 @@ function filterAndSearch() {
   const dateTo = filterDateTo.value;
   const searchText = document.getElementById('search-input').value.trim().toLowerCase();
 
-  let filtered = blogData.posts;
+  let filtered = blog.posts;
 
   if (selectedTags.length > 0) {
     filtered = filtered.filter(post => selectedTags.every(tag => post.tags.includes(tag)));
@@ -237,28 +209,36 @@ function filterAndSearch() {
   renderPosts(filtered);
 }
 
-filterTags.addEventListener('change', filterAndSearch);
-filterType.addEventListener('change', filterAndSearch);
-filterAuthor.addEventListener('change', filterAndSearch);
-filterDateFrom.addEventListener('change', filterAndSearch);
-filterDateTo.addEventListener('change', filterAndSearch);
+document.getElementById('filter-tags').addEventListener('change', filterAndSearch);
+document.getElementById('filter-type').addEventListener('change', filterAndSearch);
+document.getElementById('filter-author').addEventListener('change', filterAndSearch);
+document.getElementById('filter-date-from').addEventListener('change', filterAndSearch);
+document.getElementById('filter-date-to').addEventListener('change', filterAndSearch);
 document.getElementById('search-btn').addEventListener('click', filterAndSearch);
 document.getElementById('search-input').addEventListener('keydown', function(e) {
   if (e.key === 'Enter') filterAndSearch();
 });
 document.getElementById('reset-btn').addEventListener('click', function() {
-  filterTags.selectedIndex = -1;
-  filterType.value = '';
-  filterAuthor.value = '';
-  filterDateFrom.value = '';
-  filterDateTo.value = '';
+  document.getElementById('filter-tags').selectedIndex = -1;
+  document.getElementById('filter-type').value = '';
+  document.getElementById('filter-author').value = '';
+  document.getElementById('filter-date-from').value = '';
+  document.getElementById('filter-date-to').value = '';
   document.getElementById('search-input').value = '';
-  renderPosts(blogData.posts);
+  renderPosts(blog.posts);
 });
 
-// Pass blogData as URL-encoded JSON to editor.html
-const editLink = document.getElementById('edit-link');
-editLink.href = "editor.html?data=" + encodeURIComponent(JSON.stringify(blogData));
+document.getElementById('sign-out-btn').onclick = async function() {
+  await fetchWithSession('/api/currentUser', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ user: null })
+  });
+  signedInUser = null;
+  updateUI();
+};
+
+window.onload = loadBlogAndUsers;
 </script>
 </body>
 </html>
