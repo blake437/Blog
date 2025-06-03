@@ -157,7 +157,7 @@ app.delete('/api/posts/:index', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
-app.use(express.static('public'));
+app.use(express.static('.'));
 
 app.get('/', (req, res) => { res.redirect('/index.html'); });
 
