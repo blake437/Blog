@@ -47,7 +47,9 @@ let signedInUser = null;
 
 let sessionId = localStorage.getItem('sessionId');
 if (!sessionId) {
-  sessionId = Math.random().toString(36).slice(2);
+  const array = new Uint8Array(16); // Generate 16 random bytes
+  window.crypto.getRandomValues(array);
+  sessionId = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
   localStorage.setItem('sessionId', sessionId);
 }
 
