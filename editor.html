@@ -19,14 +19,79 @@
     .hidden { display: none; }
     .perm-list { font-size: 0.9em; color: #333; margin-top:0.3em; }
     .download-btn { margin-top: 1em; }
+    .admin-panel { border: 1px solid #ccc; padding: 1em; margin-bottom: 2em; background: #f9f9f9; }
+    .user-list { margin: 1em 0; }
+    .user-row { display: flex; align-items: center; margin-bottom: 0.5em; }
+    .user-row span { flex: 1; }
+    .user-row select { margin-left: 1em; }
+    .user-row button { margin-left: 0.5em; }
+    .add-user { margin-top: 1em; }
+    /* Modal styles */
+    .modal {
+      display: none;
+      position: fixed; z-index: 1000; left: 0; top: 0;
+      width: 100vw; height: 100vh; overflow: auto;
+      background: rgba(0,0,0,0.5);
+      justify-content: center; align-items: center;
+    }
+    .modal-content {
+      background: #fff; padding: 2em 2em 1em 2em;
+      border-radius: 5px; max-width: 350px; min-width: 250px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.2);
+    }
+    .modal-content input, .modal-content select, .modal-content button {
+      margin-top: 1em; width: 100%;
+    }
+    .profile-btn {
+      width: 100%; margin: 0.25em 0; padding: 0.6em; font-size: 1em;
+      background: #eee; border: 1px solid #aaa; border-radius: 4px; cursor: pointer;
+    }
+    .profile-btn:hover { background: #f0f8ff; }
+    .modal-title { font-weight: bold; margin-bottom: 1em; text-align: center; }
+    .modal-actions { margin-top: 1em; text-align: center; }
+    .modal .add-user-row { display: flex; gap: 0.5em; margin-top: 1em; }
+    .modal .add-user-row input, .modal .add-user-row select { flex: 1; }
   </style>
 </head>
 <body>
   <h1>Edit Blog</h1>
+
+  <!-- Profile selection modal -->
+  <div class="modal" id="profile-modal">
+    <div class="modal-content">
+      <div class="modal-title">Select Your Profile</div>
+      <div id="profile-selection"></div>
+      <div class="add-user-row">
+        <input type="text" id="modal-new-username" placeholder="New username">
+        <select id="modal-new-user-role">
+          <option value="author">Author</option>
+          <option value="admin">Admin</option>
+        </select>
+        <button onclick="modalAddUser()">+</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Admin Panel -->
+  <div class="admin-panel" id="admin-panel" style="display:none;">
+    <h3>Admin: Manage Users</h3>
+    <div class="user-list" id="user-list"></div>
+    <div class="add-user">
+      <input type="text" id="new-username" placeholder="New username">
+      <select id="new-user-role">
+        <option value="author">Author</option>
+        <option value="admin">Admin</option>
+      </select>
+      <button onclick="addUser()">Add User</button>
+    </div>
+  </div>
+  <!-- End Admin Panel -->
+
   <div class="profile-sel">
     <label>
-      Select profile:
-      <select id="profile-sel"></select>
+      Profile:
+      <span id="current-profile"></span>
+      <button id="change-profile-btn">Change Profile</button>
     </label>
     <span id="profile-info"></span>
   </div>
@@ -51,14 +116,23 @@
         <textarea id="form-content-input" required></textarea>
       </label>
       <label>Author:
-        <select id="form-author-input"></select>
+        <input type="text" id="form-author-input" readonly>
       </label>
       <button type="submit" id="form-save-btn">Save</button>
       <button type="button" id="form-cancel-btn">Cancel</button>
     </form>
   </div>
 <script>
-function parseQueryData() {
+// --- Profile Management ---
+
+// Default users if not present
+const DEFAULT_USERS = [
+  {name: 'alice', role: 'author'},
+  {name: 'bob', role: 'author'},
+  {name: 'admin', role: 'admin'}
+];
+
+function loadBlogData() {
   const params = new URLSearchParams(window.location.search);
   let data = null;
   if (params.has('data')) {
@@ -66,47 +140,198 @@ function parseQueryData() {
       data = JSON.parse(decodeURIComponent(params.get('data')));
     } catch (e) {}
   }
-  return data || {title:"Blog", posts:[]};
+  if (!data) data = {title:"Blog", posts:[]};
+  if (!data.users) data.users = DEFAULT_USERS.slice();
+  return data;
 }
-let blogData = parseQueryData();
 
-// Profiles: admin and unique authors from blogData
-function getProfiles() {
-  const authorSet = new Set(blogData.posts.map(p=>p.author));
-  let profiles = [{name:'admin', role:'admin'}];
-  authorSet.forEach(a=>profiles.push({name:a, role:'author'}));
-  return profiles;
+let blogData = loadBlogData();
+
+function saveUsersToBlogData(users) {
+  blogData.users = users;
 }
-let profiles = getProfiles();
-let currentProfile = profiles[0];
 
-function updateProfileSel() {
-  const sel = document.getElementById('profile-sel');
-  sel.innerHTML = '';
-  profiles.forEach((p,i) => {
-    const opt = document.createElement('option');
-    opt.value = p.name;
-    opt.textContent = p.role==='admin'?`${p.name} (admin)`:p.name;
-    sel.appendChild(opt);
+function getUsers() {
+  return blogData.users || [];
+}
+
+function getCurrentUser() {
+  return localStorage.getItem('currentUser');
+}
+
+function setCurrentUser(username) {
+  localStorage.setItem('currentUser', username);
+}
+
+function clearCurrentUser() {
+  localStorage.removeItem('currentUser');
+}
+
+function requireProfile() {
+  const profile = getCurrentUser();
+  if (!profile) {
+    showProfileModal();
+    return null;
+  }
+  return profile;
+}
+
+let users = getUsers();
+let currentProfileName = getCurrentUser();
+let currentProfile = users.find(p => p.name === currentProfileName) || {name: currentProfileName, role: 'author'};
+
+// ---- Modal profile selection ----
+function showProfileModal() {
+  renderProfileModal();
+  document.getElementById('profile-modal').style.display = 'flex';
+}
+function hideProfileModal() {
+  document.getElementById('profile-modal').style.display = 'none';
+}
+
+function renderProfileModal() {
+  users = getUsers();
+  const container = document.getElementById('profile-selection');
+  container.innerHTML = '';
+  users.forEach(user => {
+    const btn = document.createElement('button');
+    btn.className = 'profile-btn';
+    btn.textContent = `${user.name} (${user.role})`;
+    btn.onclick = () => {
+      setCurrentUser(user.name);
+      currentProfileName = user.name;
+      currentProfile = user;
+      updateProfileInfo();
+      updateProfileAuthorField();
+      hideProfileModal();
+      renderPosts();
+    };
+    container.appendChild(btn);
   });
-  sel.value = currentProfile.name;
-  updateProfileInfo();
 }
+function modalAddUser() {
+  const username = document.getElementById('modal-new-username').value.trim();
+  const role = document.getElementById('modal-new-user-role').value;
+  if (!username) {
+    alert('Enter a username.');
+    return;
+  }
+  users = getUsers();
+  if (users.some(u => u.name === username)) {
+    alert('User already exists.');
+    return;
+  }
+  users.push({name: username, role});
+  saveUsersToBlogData(users);
+  renderProfileModal();
+  renderAdminPanel(); // in case modal was opened by admin
+  document.getElementById('modal-new-username').value = '';
+}
+
+// --- Admin Panel Functions ---
+function renderAdminPanel() {
+  users = getUsers();
+  let html = '';
+  const adminCount = users.filter(u => u.role === 'admin').length;
+  users.forEach((user, idx) => {
+    html += `
+      <div class="user-row">
+        <span>${user.name}</span>
+        <select onchange="changeUserRole(${idx}, this.value)">
+          <option value="author" ${user.role === 'author' ? 'selected' : ''}>Author</option>
+          <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
+        </select>
+        ${user.name !== 'admin' && !(user.role === 'admin' && adminCount <= 1) ? `<button onclick="removeUser(${idx})">Remove</button>` : ''}
+      </div>
+    `;
+  });
+  document.getElementById('user-list').innerHTML = html;
+}
+
+function addUser() {
+  const username = document.getElementById('new-username').value.trim();
+  const role = document.getElementById('new-user-role').value;
+  if (!username) {
+    alert('Enter a username.');
+    return;
+  }
+  users = getUsers();
+  if (users.some(u => u.name === username)) {
+    alert('User already exists.');
+    return;
+  }
+  users.push({name: username, role});
+  saveUsersToBlogData(users);
+  renderAdminPanel();
+  renderProfileModal();
+  updateProfileAuthorField();
+  document.getElementById('new-username').value = '';
+}
+
+function removeUser(idx) {
+  users = getUsers();
+  const user = users[idx];
+  const adminCount = users.filter(u => u.role === 'admin').length;
+  if (user.role === 'admin' && adminCount <= 1) {
+    alert('Cannot remove the last admin user.');
+    return;
+  }
+  if (user.name === currentProfileName) {
+    clearCurrentUser();
+    showProfileModal();
+  }
+  users.splice(idx, 1);
+  saveUsersToBlogData(users);
+  renderAdminPanel();
+  renderProfileModal();
+  updateProfileAuthorField();
+}
+
+function changeUserRole(idx, newRole) {
+  users = getUsers();
+  const adminCount = users.filter(u => u.role === 'admin').length;
+  if (users[idx].role === 'admin' && newRole !== 'admin' && adminCount <= 1) {
+    alert('Cannot remove the last admin.');
+    renderAdminPanel();
+    return;
+  }
+  users[idx].role = newRole;
+  saveUsersToBlogData(users);
+  renderAdminPanel();
+  renderProfileModal();
+  updateProfileAuthorField();
+}
+
+// --- End Admin Panel ---
+
+// --- Blog Logic ---
+if (!blogData.posts) blogData.posts = [];
+blogData.posts.forEach(p=>{if(!p.editors)p.editors=[];});
+
 function updateProfileInfo() {
+  document.getElementById('current-profile').textContent = currentProfile ? `${currentProfile.name} (${currentProfile.role})` : '';
   document.getElementById('profile-info').textContent =
-    currentProfile.role==='admin'
+    currentProfile && currentProfile.role==='admin'
       ? 'You can edit any post and assign permissions.'
       : `You can edit or delete your posts.`;
 }
-
-document.getElementById('profile-sel').addEventListener('change', function() {
-  currentProfile = profiles.find(p=>p.name===this.value) || profiles[0];
+function updateProfileAuthorField() {
+  users = getUsers();
+  currentProfileName = getCurrentUser();
+  currentProfile = users.find(p => p.name === currentProfileName) || {name: currentProfileName, role: 'author'};
   updateProfileInfo();
-  renderPosts();
-});
+  if (currentProfile && currentProfile.role === 'admin') {
+    document.getElementById('admin-panel').style.display = '';
+    renderAdminPanel();
+  } else {
+    document.getElementById('admin-panel').style.display = 'none';
+  }
+}
 
-// Permissions: track granted editors for posts
-blogData.posts.forEach(p=>{if(!p.editors)p.editors=[];});
+document.getElementById('change-profile-btn').onclick = function() {
+  clearCurrentUser();
+  showProfileModal();
+};
 
 function renderPosts() {
   const pl = document.getElementById('post-list');
@@ -121,8 +346,7 @@ function renderPosts() {
       <span class="post-type">${post.type||''}</span>
       <span class="post-tags">${post.tags ? post.tags.join(', ') : ''}</span>
     `;
-    // Permissions: can edit if admin, author, or in editors
-    const canEdit = (currentProfile.role==='admin') || (currentProfile.name===post.author) || (post.editors||[]).includes(currentProfile.name);
+    const canEdit = (currentProfile && (currentProfile.role==='admin' || currentProfile.name===post.author || (post.editors||[]).includes(currentProfile.name)));
     if (canEdit) {
       const editBtn = document.createElement('button');
       editBtn.textContent = 'Edit';
@@ -136,15 +360,13 @@ function renderPosts() {
       delBtn.onclick = () => { if(confirm('Delete this post?')){ blogData.posts.splice(i,1); renderPosts(); updateProfilesFromPosts(); }};
       entry.appendChild(delBtn);
     }
-    if (currentProfile.role==='admin' || currentProfile.name===post.author) {
-      // Grant edit access to others
+    if (currentProfile && (currentProfile.role==='admin' || currentProfile.name===post.author)) {
       const grantBtn = document.createElement('button');
       grantBtn.textContent = 'Grant edit access';
       grantBtn.className = 'grant-btn';
       grantBtn.onclick = () => grantEditorUI(i);
       entry.appendChild(grantBtn);
     }
-    // List editors
     if(post.editors && post.editors.length)
       entry.innerHTML += `<div class="perm-list">Editors: ${post.editors.join(', ')}</div>`;
     pl.appendChild(entry);
@@ -152,23 +374,18 @@ function renderPosts() {
 }
 
 function updateProfilesFromPosts() {
-  profiles = getProfiles();
-  updateProfileSel();
+  users = getUsers();
+  updateProfileAuthorField();
 }
 
 function openForm(mode, idx) {
   document.getElementById('post-form-container').classList.remove('hidden');
   document.getElementById('post-list').classList.add('hidden');
   document.getElementById('json-editor-container').classList.add('hidden');
-  // Populate author select
-  const sel = document.getElementById('form-author-input');
-  sel.innerHTML = '';
-  profiles.filter(p => p.role === 'author').forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p.name;
-    opt.textContent = p.name;
-    sel.appendChild(opt);
-  });
+  const authorField = document.getElementById('form-author-input');
+  authorField.value = currentProfile.name;
+  authorField.readOnly = true;
+
   if(mode==='edit') {
     const post = blogData.posts[idx];
     document.getElementById('form-title').textContent = 'Edit Post';
@@ -177,15 +394,19 @@ function openForm(mode, idx) {
     document.getElementById('form-tags-input').value = post.tags.join(', ');
     document.getElementById('form-type-input').value = post.type;
     document.getElementById('form-content-input').value = post.content;
-    sel.value = post.author;
+    authorField.value = currentProfile.name;
     document.getElementById('post-form').onsubmit = function(e){
       e.preventDefault();
+      if (post.author !== currentProfile.name && currentProfile.role !== 'admin' && !(post.editors||[]).includes(currentProfile.name)) {
+        alert('You do not have permission to edit this post.');
+        return false;
+      }
       post.title = document.getElementById('form-title-input').value;
       post.date = document.getElementById('form-date-input').value;
       post.tags = document.getElementById('form-tags-input').value.split(',').map(s=>s.trim()).filter(Boolean);
       post.type = document.getElementById('form-type-input').value;
       post.content = document.getElementById('form-content-input').value;
-      post.author = document.getElementById('form-author-input').value;
+      post.author = authorField.value;
       renderPosts(); closeForm();
       updateProfilesFromPosts();
     };
@@ -196,7 +417,7 @@ function openForm(mode, idx) {
     document.getElementById('form-tags-input').value = '';
     document.getElementById('form-type-input').value = '';
     document.getElementById('form-content-input').value = '';
-    sel.value = currentProfile.name;
+    authorField.value = currentProfile.name;
     document.getElementById('post-form').onsubmit = function(e){
       e.preventDefault();
       const post = {
@@ -205,7 +426,7 @@ function openForm(mode, idx) {
         tags: document.getElementById('form-tags-input').value.split(',').map(s=>s.trim()).filter(Boolean),
         type: document.getElementById('form-type-input').value,
         content: document.getElementById('form-content-input').value,
-        author: document.getElementById('form-author-input').value,
+        author: authorField.value,
         editors: []
       };
       blogData.posts.push(post);
@@ -224,7 +445,8 @@ document.getElementById('add-post-btn').onclick = () => openForm('add');
 
 function grantEditorUI(idx) {
   const post = blogData.posts[idx];
-  const others = profiles.filter(p => p.role==='author' && p.name!==post.author);
+  users = getUsers();
+  const others = users.filter(p => p.role==='author' && p.name!==post.author);
   const grantee = prompt('Grant edit access to which profile? ('+others.map(p=>p.name).join(', ')+')');
   if(grantee && others.some(p=>p.name===grantee)) {
     if(!post.editors) post.editors=[];
@@ -233,7 +455,6 @@ function grantEditorUI(idx) {
   }
 }
 
-// JSON edit
 document.getElementById('toggle-json-btn').onclick = function(){
   const c = document.getElementById('json-editor-container');
   c.classList.toggle('hidden');
@@ -243,8 +464,10 @@ document.getElementById('toggle-json-btn').onclick = function(){
 document.getElementById('save-json-btn').onclick = function(){
   try {
     blogData = JSON.parse(document.getElementById('json-editor').value);
+    if (!blogData.users) blogData.users = DEFAULT_USERS.slice();
     renderPosts();
     updateProfilesFromPosts();
+    renderProfileModal();
     alert('Blog data loaded.');
     document.getElementById('json-editor-container').classList.add('hidden');
     document.getElementById('post-list').classList.remove('hidden');
@@ -253,7 +476,6 @@ document.getElementById('save-json-btn').onclick = function(){
   }
 };
 
-// Download JSON
 document.getElementById('download-btn').onclick = function() {
   const blob = new Blob([JSON.stringify(blogData, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
@@ -266,8 +488,22 @@ document.getElementById('download-btn').onclick = function() {
   URL.revokeObjectURL(url);
 };
 
-renderPosts();
-updateProfileSel();
+// Initial load: if not signed in, show modal
+window.onload = function() {
+  if (!getCurrentUser()) {
+    showProfileModal();
+  } else {
+    updateProfileAuthorField();
+    renderPosts();
+  }
+};
+
+// Expose admin functions for inline HTML event handlers
+window.addUser = addUser;
+window.removeUser = removeUser;
+window.changeUserRole = changeUserRole;
+window.modalAddUser = modalAddUser;
+
 </script>
 </body>
 </html>
