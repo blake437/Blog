@@ -36,6 +36,7 @@
   <div id="pw-res"></div>
   <button id="setup-passkey-btn" onclick="registerPasskey()">Set up Passkey</button>
   <button id="remove-passkey-btn" onclick="removePasskey()">Remove Passkey</button>
+  <div id="passkey-res"></div>
   <button onclick="removePassword()">Remove Password</button>
 </div>
 
@@ -339,6 +340,50 @@ async function checkSession() {
     }
   }
 }
+
+async function registerPasskey() {
+  try {
+    const name = currentUser?.name;
+    if (!name) {
+      document.getElementById('passkey-res').innerText = "User information not found.";
+      return;
+    }
+    const optionsRes = await api('/api/passkey/registerRequest', 'POST', { name });
+    if (!optionsRes.success) throw new Error(optionsRes.error || "Failed to get registration options");
+    const credential = await navigator.credentials.create({ publicKey: optionsRes.options });
+    const verifyRes = await api('/api/passkey/registerResponse', 'POST', { name, credential });
+    if (verifyRes.success) {
+      document.getElementById('passkey-res').innerText = "Passkey set up!";
+      document.getElementById('passkey-res').className = "success";
+    } else {
+      throw new Error(verifyRes.error || "Passkey setup failed");
+    }
+  } catch (err) {
+    document.getElementById('passkey-res').innerText = err.message;
+    document.getElementById('passkey-res').className = "error";
+  }
+}
+
+async function removePasskey() {
+  try {
+    const name = currentUser?.name;
+    if (!name) {
+      document.getElementById('passkey-res').innerText = "User information not found.";
+      return;
+    }
+    const res = await api('/api/passkey/remove', 'POST', { name });
+    if (res.success) {
+      document.getElementById('passkey-res').innerText = "Passkey removed.";
+      document.getElementById('passkey-res').className = "success";
+    } else {
+      throw new Error(res.error || "Failed to remove passkey");
+    }
+  } catch (err) {
+    document.getElementById('passkey-res').innerText = err.message;
+    document.getElementById('passkey-res').className = "error";
+  }
+}
+  
 checkSession();
 </script>
 </body>
