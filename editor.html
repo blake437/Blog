@@ -341,29 +341,62 @@ async function checkSession() {
   }
 }
 
-async function registerPasskey() {
-  try {
-    const name = currentUser?.name;
-    if (!name) {
-      document.getElementById('passkey-res').innerText = "User information not found.";
-      return;
+// Helper function to convert base64url string to Uint8Array
+function base64urlToUint8Array(base64urlString) {
+    // Convert from base64url to base64
+    let base64 = base64urlString.replace(/-/g, '+').replace(/_/g, '/');
+    // Pad base64 string as needed
+    while (base64.length % 4) {
+        base64 += '=';
     }
-    const optionsRes = await api('/api/passkey/registerRequest', 'POST', { name });
-    if (!optionsRes.success) throw new Error(optionsRes.error || "Failed to get registration options");
-    const credential = await navigator.credentials.create({ publicKey: optionsRes.options });
-    const verifyRes = await api('/api/passkey/registerResponse', 'POST', { name, credential });
-    if (verifyRes.success) {
-      document.getElementById('passkey-res').innerText = "Passkey set up!";
-      document.getElementById('passkey-res').className = "success";
-    } else {
-      throw new Error(verifyRes.error || "Passkey setup failed");
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
     }
-  } catch (err) {
-    document.getElementById('passkey-res').innerText = err.message;
-    document.getElementById('passkey-res').className = "error";
-  }
+    return bytes;
 }
 
+async function registerPasskey() {
+    try {
+        const name = currentUser?.name;
+        if (!name) {
+            document.getElementById('passkey-res').innerText = "User information not found.";
+            return;
+        }
+        // Step 1: Get registration options from backend
+        const optionsRes = await api('/api/passkey/registerRequest', 'POST', { name });
+        if (!optionsRes.success) throw new Error(optionsRes.error || "Failed to get registration options");
+        const options = optionsRes.options;
+
+        // Step 2: Convert challenge and user.id to Uint8Array
+        options.challenge = base64urlToUint8Array(options.challenge);
+        options.user.id = base64urlToUint8Array(options.user.id);
+
+        // If excludeCredentials is present, convert their id fields as well
+        if (options.excludeCredentials) {
+            options.excludeCredentials = options.excludeCredentials.map(cred => ({
+                ...cred,
+                id: base64urlToUint8Array(cred.id)
+            }));
+        }
+
+        // Step 3: Call WebAuthn API
+        const credential = await navigator.credentials.create({ publicKey: options });
+
+        // Step 4: Send credential to backend for verification
+        const verifyRes = await api('/api/passkey/registerResponse', 'POST', { name, credential });
+        if (verifyRes.success) {
+            document.getElementById('passkey-res').innerText = "Passkey set up!";
+            document.getElementById('passkey-res').className = "success";
+        } else {
+            throw new Error(verifyRes.error || "Passkey setup failed");
+        }
+    } catch (err) {
+        document.getElementById('passkey-res').innerText = err.message;
+        document.getElementById('passkey-res').className = "error";
+    }
+}
 async function removePasskey() {
   try {
     const name = currentUser?.name;
