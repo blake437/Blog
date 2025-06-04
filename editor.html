@@ -172,7 +172,7 @@ async function impersonate(user) {
     currentUser = res.user;
     document.getElementById('user-name').innerText = currentUser.name;
     document.getElementById('user-role').innerText = currentUser.role;
-    loadPosts();
+    window.refresh();
   }
 }
 
