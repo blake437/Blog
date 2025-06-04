@@ -71,6 +71,18 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/user/remove-password', requireAuth, (req, res) => {
+  if (
+    req.user.role === "admin" ||
+    (req.user.password && req.user.passkeys && req.user.passkeys.length > 0)
+  ) {
+    req.user.password = undefined;
+    res.json({ success: true });
+  } else {
+    res.status(403).json({ error: "Not allowed" });
+  }
+});
+
 // Start passkey registration (must be authenticated)
 app.post('/api/passkey/register/options', requireAuth, (req, res) => {
   const name = req.user.name;
