@@ -133,7 +133,12 @@ app.post('/api/passkey/register/verify', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/passkey/auth/options', (req, res) => {
+const authOptionsLimiter = RateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // max 100 requests per windowMs
+});
+
+app.post('/api/passkey/auth/options', authOptionsLimiter, (req, res) => {
   const { name } = req.body;
   const user = users.find(u => u.name === name && u.passkeys && u.passkeys.length > 0);
   if (!user) return res.status(404).json({ error: "User not found" });
