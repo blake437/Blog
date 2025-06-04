@@ -41,7 +41,7 @@ function requireAdmin(req, res, next) {
 
 // --- API Routes ---
 
-app.get('/api/blog', (req, res) => res.json(blog));
+app.get('/api/blog', (req, res) => {res.json(blog); console.log("blog accessed");});
 app.get('/api/userinfo', (req, res) => {
   const user = users.find(u => u.name === req.query.name);
   if (!user) return res.status(404).json({ error: "User not found" });
@@ -243,6 +243,7 @@ app.post('/api/users', requireAuth, requireAdmin, (req, res) => {
   if (users.find(u => u.name === name)) return res.status(400).json({ error: "User already exists" });
   users.push({ name, role, password });
   res.status(201).json({ name, role });
+  console.log("User created. Username is: " + name + ". Role is: " + role + ".");
 });
 app.put('/api/users/:name', requireAuth, requireAdmin, (req, res) => {
   const { name } = req.params;
