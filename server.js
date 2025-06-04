@@ -15,7 +15,7 @@ let blog = {
   ]
 };
 
-let users = [{ name: "admin", role: "admin", password: bcrypt.hashSync("0000", 10), passkeys: []}];
+let users = [{ name: "admin", role: "admin", password: bcrypt.hashSync("0000", 10), passkeys: [], failedAttempts: 0}];
 
 let currentUser = {}; // { sessionId: username }
 function getSessionId(req) {
@@ -60,9 +60,19 @@ app.post('/api/login', async (req, res) => {
   const { name, password } = req.body;
   const user = users.find(u => u.name === name);
   if (!user) return res.status(401).json({ error: "Invalid login" });
-  const match = await bcrypt.compare(password, user.password);
-  if (!match) return res.status(401).json({ error: "Invalid login" });
+
   if (user.role == "suspended") return res.status(403).json({ error: "Account suspended" });
+
+  const match = await bcrypt.compare(password, user.password);
+  if (!match) {
+    user.failedAttempts = (user.failedAttempts || 0) + 1;
+    if (user.failedAttempts > 10) {
+      user.role = "suspended";
+      return res.status(403).json({ error: "Account suspended due to too many failed attempts" });
+    }
+    return res.status(401).json({ error: "Invalid login" });
+  }
+  user.failedAttempts = 0; // Reset on successful login
   const sid = getSessionId(req);
   currentUser[sid] = name;
   res.json({ success: true, user: { name: user.name, role: user.role } });
