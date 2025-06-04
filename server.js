@@ -61,6 +61,7 @@ app.post('/api/login', async (req, res) => {
   if (!user) return res.status(401).json({ error: "Invalid login" });
   const match = await bcrypt.compare(password, user.password);
   if (!match) return res.status(401).json({ error: "Invalid login" });
+  if (user.role = "suspended") return res.status(403).json({ error: "Account susoended" });
   const sid = getSessionId(req);
   currentUser[sid] = name;
   res.json({ success: true, user: { name: user.name, role: user.role } });
