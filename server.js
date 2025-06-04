@@ -58,6 +58,7 @@ app.get('/api/currentUser', (req, res) => {
 });
 app.post('/api/login', async (req, res) => {
   const { name, password } = req.body;
+  console.log("Login attempted as " + name + ".");
   const user = users.find(u => u.name === name);
   if (!user) return res.status(401).json({ error: "Invalid login" });
 
@@ -68,14 +69,17 @@ app.post('/api/login', async (req, res) => {
     user.failedAttempts = (user.failedAttempts || 0) + 1;
     if (user.failedAttempts > 10) {
       user.role = "suspended";
+      console.log(name + "'s account was suspended due to too many failed login attempts");
       return res.status(403).json({ error: "Account suspended due to too many failed attempts" });
     }
     return res.status(401).json({ error: "Invalid login" });
+    console.log(name + " entered an incorrect password")
   }
   user.failedAttempts = 0; // Reset on successful login
   const sid = getSessionId(req);
   currentUser[sid] = name;
   res.json({ success: true, user: { name: user.name, role: user.role } });
+  console.log(name + " logged in successfully");
 });
 app.post('/api/logout', (req, res) => {
   const sid = getSessionId(req);
