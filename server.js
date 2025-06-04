@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
+const RateLimit = require('express-rate-limit');
 const app = express();
 
 app.use(cors());
@@ -148,7 +149,12 @@ app.post('/api/passkey/auth/options', (req, res) => {
   res.json(options);
 });
 
-app.post('/api/passkey/auth/verify', async (req, res) => {
+const authVerifyLimiter = RateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // max 100 requests per windowMs
+});
+
+app.post('/api/passkey/auth/verify', authVerifyLimiter, async (req, res) => {
   const { name, assertionResponse } = req.body;
   const user = users.find(u => u.name === name && u.passkeys && u.passkeys.length > 0);
   const challengeData = passkeyChallenge[getSessionId(req)];
