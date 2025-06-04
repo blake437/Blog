@@ -101,7 +101,12 @@ app.post('/api/passkey/register/options', requireAuth, (req, res) => {
 });
 
 // Finish passkey registration
-app.post('/api/passkey/register/verify', requireAuth, async (req, res) => {
+const registerVerifyLimiter = RateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // max 100 requests per windowMs
+});
+
+app.post('/api/passkey/register/verify', registerVerifyLimiter, requireAuth, async (req, res) => {
   const { attestationResponse, nickname } = req.body;
   const regData = passkeyChallenge[getSessionId(req)];
   if (!regData) return res.status(400).json({ error: "No registration in progress" });
