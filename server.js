@@ -119,6 +119,57 @@ app.post('/api/passkey/register/verify', requireAuth, async (req, res) => {
   }
 });
 
+app.post('/api/passkey/auth/options', (req, res) => {
+  const { name } = req.body;
+  const user = users.find(u => u.name === name && u.passkeys && u.passkeys.length > 0);
+  if (!user) return res.status(404).json({ error: "User not found" });
+  const options = generateAuthenticationOptions({
+    allowCredentials: user.passkeys.map(pk => ({
+      id: base64url.toBuffer(pk.credentialID),
+      type: 'public-key'
+    })),
+    userVerification: 'preferred',
+    rpID: req.hostname
+  });
+  passkeyChallenge[getSessionId(req)] = { challenge: options.challenge, name };
+  res.json(options);
+});
+
+app.post('/api/passkey/auth/verify', async (req, res) => {
+  const { name, assertionResponse } = req.body;
+  const user = users.find(u => u.name === name && u.passkeys && u.passkeys.length > 0);
+  const challengeData = passkeyChallenge[getSessionId(req)];
+  if (!user || !challengeData) return res.status(400).json({ error: "Bad request" });
+
+  let matchedPasskey;
+  for (const pk of user.passkeys) {
+    try {
+      let verification = await verifyAuthenticationResponse({
+        expectedChallenge: challengeData.challenge,
+        expectedOrigin: `https://${req.hostname}`,
+        expectedRPID: req.hostname,
+        response: assertionResponse,
+        authenticator: {
+          credentialID: base64url.toBuffer(pk.credentialID),
+          credentialPublicKey: base64url.toBuffer(pk.credentialPublicKey),
+          counter: pk.counter
+        }
+      });
+      if (verification.verified) {
+        pk.counter = verification.authenticationInfo.newCounter;
+        matchedPasskey = pk;
+        break;
+      }
+    } catch (e) {}
+  }
+  if (matchedPasskey) {
+    currentUser[getSessionId(req)] = name;
+    res.json({ success: true, user: { name, role: user.role } });
+  } else {
+    res.status(400).json({ error: "Authentication failed" });
+  }
+});
+
 // --- Admin impersonation ---
 app.post('/api/admin/impersonate', requireAuth, requireAdmin, (req, res) => {
   const { target } = req.body;
