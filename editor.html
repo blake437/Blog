@@ -240,12 +240,16 @@ async function refreshUsers() {
   for (const user of allUsers) {
     let li = document.createElement('li');
     li.innerHTML = `
-      <b>${user.name}</b> (${user.role})
-      <button onclick="impersonate('${user.name}')">Sign in as</button>
-      <button onclick="adminChangeUserPassword('${user.name}')">Change Password</button>
-      <button onclick="adminChangeUserRole('${user.name}')">Change Role</button>
-      <button onclick="adminDeleteUser('${user.name}')">Delete</button>
-    `;
+  <b>${user.name}</b>
+  <select onchange="changeUserRoleDropdown('${user.name}')">
+    <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>admin</option>
+    <option value="author" ${user.role === 'author' ? 'selected' : ''}>author</option>
+    <option value="suspended" ${user.role === 'suspended' ? 'selected' : ''}>suspended</option>
+  </select>
+  <button onclick="impersonate('${user.name}')">Sign in as</button>
+  <button onclick="adminChangeUserPassword('${user.name}')">Change Password</button>
+  <button onclick="adminDeleteUser('${user.name}')">Delete</button>
+`;
     ul.appendChild(li);
   }
   // Also populate asUser select for post-as
