@@ -71,6 +71,54 @@ app.post('/api/logout', (req, res) => {
   res.json({ success: true });
 });
 
+// Start passkey registration (must be authenticated)
+app.post('/api/passkey/register/options', requireAuth, (req, res) => {
+  const name = req.user.name;
+  const options = generateRegistrationOptions({
+    rpName: "Blog",
+    rpID: req.hostname,
+    userID: name,
+    userName: name,
+    attestationType: 'none',
+    authenticatorSelection: { userVerification: 'preferred', residentKey: 'required' }
+  });
+  passkeyChallenge[getSessionId(req)] = { challenge: options.challenge, name };
+  res.json(options);
+});
+
+// Finish passkey registration
+app.post('/api/passkey/register/verify', requireAuth, async (req, res) => {
+  const { attestationResponse, nickname } = req.body;
+  const regData = passkeyChallenge[getSessionId(req)];
+  if (!regData) return res.status(400).json({ error: "No registration in progress" });
+  let verification;
+  try {
+    verification = await verifyRegistrationResponse({
+      response: attestationResponse,
+      expectedChallenge: regData.challenge,
+      expectedOrigin: `https://${req.hostname}`,
+      expectedRPID: req.hostname,
+    });
+  } catch (e) {
+    return res.status(400).json({ error: "Invalid registration" });
+  }
+  if (verification.verified) {
+    const { credentialID, credentialPublicKey, counter } = verification.registrationInfo;
+    const user = users.find(u => u.name === regData.name);
+    if (!user.passkeys) user.passkeys = [];
+    user.passkeys.push({
+      credentialID: base64url.encode(credentialID),
+      credentialPublicKey: base64url.encode(credentialPublicKey),
+      counter,
+      nickname: nickname || "Unnamed"
+    });
+    delete passkeyChallenge[getSessionId(req)];
+    res.json({ success: true });
+  } else {
+    res.status(400).json({ error: "Verification failed" });
+  }
+});
+
 // --- Admin impersonation ---
 app.post('/api/admin/impersonate', requireAuth, requireAdmin, (req, res) => {
   const { target } = req.body;
